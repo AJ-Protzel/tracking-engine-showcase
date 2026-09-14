@@ -1,0 +1,7 @@
+.env
+.env.*
+*.secrets.yaml
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

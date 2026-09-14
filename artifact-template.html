@@ -1,0 +1,2734 @@
+<title>Tracking Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+/* Blue hour into first light: cool slate ground, one sunrise amber for the
+   things he has to act on. Semantic colors stay separate from that accent. */
+:root{
+  --paper:#e9edf2; --card:#ffffff; --sunk:#f2f5f8;
+  --ink:#111924; --ink-2:#445366; --ink-3:#78889b;
+  --line:#d4dce6; --line-2:#e4eaf1;
+  --accent:#9a6410; --accent-soft:#f6ecd8;
+  --in:#2f6b4a; --in-soft:#dcece3;
+  --out:#a03a2c; --out-soft:#f7e3df;
+  --warn:#8f6410; --warn-soft:#f7edd6;
+  --on-ink:#ffffff; --card-fade:rgba(255,255,255,0);
+  --shadow:0 1px 2px rgba(17,25,36,.05),0 10px 28px -20px rgba(17,25,36,.4);
+  --sticky-shadow:0 6px 16px -12px rgba(17,25,36,.5);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0c1218; --card:#141c25; --sunk:#0f1720;
+    --ink:#e7edf5; --ink-2:#a9b8c9; --ink-3:#78889b;
+    --line:#26313d; --line-2:#1c252f;
+    --accent:#e0a94e; --accent-soft:#2c2415;
+    --in:#6fbf90; --in-soft:#17281f;
+    --out:#e08573; --out-soft:#2c1c19;
+    --warn:#dcac4d; --warn-soft:#2a2315;
+    --on-ink:#0c1218; --card-fade:rgba(20,28,37,0);
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 28px -20px rgba(0,0,0,.9);
+    --sticky-shadow:0 6px 16px -12px rgba(0,0,0,.9);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0c1218; --card:#141c25; --sunk:#0f1720;
+  --ink:#e7edf5; --ink-2:#a9b8c9; --ink-3:#78889b;
+  --line:#26313d; --line-2:#1c252f;
+  --accent:#e0a94e; --accent-soft:#2c2415;
+  --in:#6fbf90; --in-soft:#17281f;
+  --out:#e08573; --out-soft:#2c1c19;
+  --warn:#dcac4d; --warn-soft:#2a2315;
+  --on-ink:#0c1218; --card-fade:rgba(20,28,37,0);
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 28px -20px rgba(0,0,0,.9);
+  --sticky-shadow:0 6px 16px -12px rgba(0,0,0,.9);
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:680px;margin:0 auto;padding:0 16px 64px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+
+header.top{padding:28px 0 18px}
+h1{font-family:"Bricolage Grotesque","Public Sans",sans-serif;font-weight:800;
+  font-size:clamp(28px,7vw,38px);line-height:1.02;letter-spacing:-.02em;margin:0;
+  text-wrap:balance}
+.date{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px;
+  color:var(--ink-3);letter-spacing:.02em;margin-top:6px}
+
+/* ===== the three pages ===== */
+/* One strip, one page shown at a time. `.tabs`/`.tab` were already taken by
+   the category chips inside the money card, so these carry their own names
+   rather than overloading those. --tabh is the strip's height, and the money
+   card's own sticky header sits below it. */
+:root{--tabh:43px}
+.pagetabs{position:sticky;top:0;z-index:8;display:flex;
+  background:var(--paper);border-bottom:1px solid var(--line);
+  margin:0 -16px 16px;padding:0 16px}
+.ptab{flex:1 1 0;min-width:0;font:inherit;cursor:pointer;
+  font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;
+  font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);background:none;border:none;
+  border-bottom:2px solid transparent;margin-bottom:-1px;
+  padding:14px 4px 12px;white-space:nowrap}
+@media (max-width:380px){.ptab{font-size:10px;letter-spacing:.06em}}
+.ptab:hover{color:var(--ink)}
+.ptab[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+.page{display:flex;flex-direction:column;gap:14px}
+
+main{display:flex;flex-direction:column;gap:14px}
+section.card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+  box-shadow:var(--shadow);overflow:hidden}
+.card-head{display:flex;align-items:center;gap:10px;padding:15px 18px 13px}
+h2{font-family:"Bricolage Grotesque","Public Sans",sans-serif;font-size:16px;
+  font-weight:700;letter-spacing:-.01em;margin:0;flex:1}
+.count{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;
+  font-weight:500;padding:3px 9px;border-radius:999px;background:var(--sunk);
+  color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.count.act{background:var(--accent-soft);color:var(--accent)}
+.card-body{padding:16px 18px}
+.card.plain .card-head{border-bottom:1px solid var(--line-2);padding-bottom:15px}
+
+/* ===== money: the sticky control block ===== */
+/* position:sticky dies inside an overflow:hidden ancestor, so this one card
+   opts out of the shared clip. */
+.money-card{overflow:visible}
+.stick{position:sticky;top:var(--tabh);z-index:5;background:var(--card);
+  border-radius:13px 13px 0 0;border-bottom:1px solid var(--line-2);
+  box-shadow:var(--sticky-shadow)}
+
+/* month navigator: one bar the width of the card, arrows at both ends. The
+   middle is a button too - it jumps back to the newest month. */
+.monthnav{display:flex;align-items:stretch;margin:15px 18px 0;overflow:hidden;
+  border:1px solid var(--line);border-radius:10px;background:var(--sunk)}
+.mnav{flex:none;width:46px;padding:9px 0;font:inherit;font-size:18px;
+  line-height:1.2;cursor:pointer;background:none;border:none;color:var(--ink-2)}
+.mnav:hover:not(:disabled){background:var(--card);color:var(--ink)}
+.mnav:disabled{opacity:.28;cursor:default}
+.mnav-mid{flex:1;min-width:0;padding:9px 4px;border:none;background:none;
+  cursor:pointer;color:var(--ink);
+  font-family:"Bricolage Grotesque","Public Sans",sans-serif;
+  font-size:15px;font-weight:700;letter-spacing:-.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mnav-mid:hover{background:var(--card)}
+.figs{display:flex;gap:10px;padding:12px 18px 0}
+.fig{flex:1;min-width:0;border-radius:10px;padding:10px;background:var(--sunk)}
+.fig.in{background:var(--in-soft)}
+.fig.out{background:var(--out-soft)}
+.fig-label{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10px;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3)}
+/* Sized to fit three figures across a phone without wrapping. A wrapped
+   currency value reads as two numbers, which is worse than a small one. */
+.fig-val{font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:clamp(12px,3.9vw,19px);
+  font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums;
+  letter-spacing:-.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fig.in .fig-val{color:var(--in)}
+.fig.out .fig-val{color:var(--out)}
+.fig.net .fig-val{color:var(--ink)}
+
+/* tab strip: scrolls sideways on a phone rather than wrapping to two rows */
+.tabs{display:flex;gap:7px;overflow-x:auto;padding:12px 18px 13px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;font:inherit;font-size:13px;font-weight:600;cursor:pointer;
+  padding:5px 12px;border-radius:999px;border:1px solid var(--line);
+  background:var(--card);color:var(--ink-2);white-space:nowrap}
+.tab:hover{border-color:var(--ink-3)}
+.tab[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);
+  color:var(--on-ink)}
+
+/* ===== spend by category: name, proportional rule, amount ===== */
+.cats{display:flex;flex-direction:column;gap:2px;margin:0 0 4px}
+.cat{display:grid;grid-template-columns:66px 1fr auto;align-items:center;gap:10px;
+  width:100%;font:inherit;text-align:left;cursor:pointer;background:none;
+  border:none;padding:5px 0;border-radius:6px}
+.cat-name{font-size:13px;font-weight:600;color:var(--ink-2)}
+.cat-bar{height:6px;border-radius:3px;background:var(--sunk);overflow:hidden}
+.cat-bar i{display:block;height:100%;background:var(--out);border-radius:3px}
+.cat-amt{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px;
+  font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink-2);
+  white-space:nowrap}
+.money-card.picked .cat{opacity:.4}
+.money-card.picked .cat.on{opacity:1}
+.cat.on .cat-name{color:var(--ink);font-weight:700}
+.cats-head{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);margin:0 0 8px}
+
+/* ===== the transactions, grouped by the day they posted ===== */
+/* Collapsed by default: the figures and the bars are the daily read, the
+   individual rows are the follow-up question. */
+.disclose{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  width:100%;margin-top:16px;padding:11px 13px;border-radius:10px;
+  border:1px solid var(--line);background:var(--sunk);color:var(--ink-2);
+  font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.disclose:hover{border-color:var(--ink-3);color:var(--ink)}
+.chev{flex:none;width:7px;height:7px;margin-top:-3px;
+  border-right:2px solid currentColor;border-bottom:2px solid currentColor;
+  transform:rotate(45deg);transition:transform .2s ease}
+.disclose[aria-expanded="true"] .chev{transform:rotate(-135deg);margin-top:2px}
+@media (prefers-reduced-motion: reduce){.chev{transition:none}}
+.ledger{margin-top:18px;padding-top:14px;border-top:1px solid var(--line-2)}
+.day{margin-top:16px;padding-top:13px;border-top:1px solid var(--line-2)}
+/* filtering can hide the first group, so the leading rule is set in JS
+   rather than with :first-child */
+.day.lead{margin-top:0;padding-top:0;border-top:none}
+.day-label{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);margin:0 0 9px}
+.txns{display:flex;flex-direction:column;gap:10px}
+.txn{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.txn-main{min-width:0}
+.txn-name{font-size:14px;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.txn-name.raw{color:var(--ink-2);font-weight:500}
+.txn-meta{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;
+  color:var(--ink-3);margin-top:2px}
+.txn-amt{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:14px;
+  font-weight:600;color:var(--out);white-space:nowrap;
+  font-variant-numeric:tabular-nums}
+.txn-amt.pos{color:var(--in)}
+.caveat{margin:16px 0 0;color:var(--ink-3);font-size:13px;line-height:1.45}
+.caveat+.caveat{margin-top:6px}
+
+/* ===== budget: three benchmark caps, filled left to right ===== */
+/* The caps do not scale to anything on this page. A bar whose ceiling was
+   drawn from his own averages would rise to meet him and always read green. */
+.bud-head{display:flex;justify-content:space-between;gap:12px;
+  align-items:baseline;margin:0 0 16px}
+.bud-when{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3)}
+.bud-left{font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:clamp(15px,4.6vw,20px);font-weight:700;letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums;color:var(--in);white-space:nowrap}
+.bud-left.over{color:var(--out)}
+.count.bad{background:var(--out-soft);color:var(--out)}
+
+.buds{display:flex;flex-direction:column;gap:15px}
+.bud-line{display:flex;justify-content:space-between;gap:10px;
+  align-items:baseline;margin-bottom:6px}
+.bud-name{font-size:13px;font-weight:600;color:var(--ink-2)}
+.bud-fig{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px;
+  font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink-3);
+  white-space:nowrap}
+.bud-fig b{color:var(--ink);font-weight:700}
+.bud-row.over .bud-name,.bud-row.over .bud-fig b{color:var(--out)}
+.bud-track{height:10px;border-radius:5px;background:var(--sunk);overflow:hidden}
+.bud-track i{display:block;height:100%;width:0;border-radius:5px;
+  background:var(--in);transition:width .3s ease}
+.bud-row.over .bud-track i{background:var(--out)}
+@media (prefers-reduced-motion: reduce){.bud-track i{transition:none}}
+
+/* the weeks already behind him: one block each, most recent at the right.
+   A week the feed never covered is grey, not green — an absence of charges
+   is not the same as a week spent under the cap. */
+.bud-hist{display:flex;gap:3px;margin-top:22px}
+.bud-hist span{flex:1;height:24px;border-radius:3px;background:var(--sunk)}
+.bud-hist span.under{background:var(--in)}
+.bud-hist span.over{background:var(--out)}
+.bud-hist-x{display:flex;justify-content:space-between;gap:10px;margin-top:7px;
+  font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10px;
+  letter-spacing:.06em;color:var(--ink-3)}
+
+/* ===== renaming and categorizing a row, from the page ===== */
+/* A tapped row opens under itself. The edit is stored against the merchant,
+   not the charge, so tomorrow's charge from the same place lands named. */
+.txn-row{display:flex;flex-direction:column}
+.txn{width:100%;font:inherit;text-align:left;background:none;border:none;
+  padding:0;color:inherit}
+.ledger.editable .txn{cursor:pointer}
+.ledger.editable .txn:hover .txn-name{color:var(--accent)}
+.txn.open .txn-name{color:var(--accent)}
+.pend{color:var(--accent);font-weight:700}
+/* A charge the bank has not settled. It counts in every total — the money is
+   spent — so the marker goes on the row rather than into `category`, which the
+   spend bars read, or into the name, which the merchant alias map matches on. */
+.prov{color:var(--warn);font-weight:700}
+.ed-hint{margin:0 0 14px;color:var(--ink-3);font-size:12px}
+.txn-edit{margin:11px 0 3px;padding:13px;border:1px solid var(--line);
+  border-radius:10px;background:var(--sunk)}
+.ed-lab{display:block;font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:10px;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--ink-3);margin:0 0 6px}
+.ed-block{margin-top:12px}
+.ed-name{width:100%;font:inherit;font-size:14px;font-weight:600;
+  color:var(--ink);background:var(--card);border:1px solid var(--line);
+  border-radius:8px;padding:9px 10px}
+.ed-chips{display:flex;flex-wrap:wrap;gap:6px}
+.ed-chip{font:inherit;font-size:12px;font-weight:600;cursor:pointer;
+  padding:5px 11px;border-radius:999px;border:1px solid var(--line);
+  background:var(--card);color:var(--ink-2)}
+.ed-chip:hover{border-color:var(--ink-3)}
+.ed-chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);
+  color:var(--on-ink)}
+.ed-acts{display:flex;align-items:center;gap:8px;margin-top:14px}
+.ed-btn{font:inherit;font-size:13px;font-weight:600;cursor:pointer;
+  padding:8px 15px;border-radius:9px;border:1px solid var(--line);
+  background:var(--card);color:var(--ink-2)}
+.ed-btn:hover{border-color:var(--ink-3);color:var(--ink)}
+.ed-btn.go{background:var(--ink);border-color:var(--ink);color:var(--on-ink)}
+.ed-btn.undo{margin-left:auto;color:var(--out);border-color:var(--line)}
+.ed-btn.undo:hover{border-color:var(--out);color:var(--out)}
+.ed-note{margin:11px 0 0;color:var(--ink-3);font-size:12px;line-height:1.45}
+
+/* ===== card credits ===== */
+/* Struck through rather than removed: these refresh on their own cycle,
+   so a used credit is a state, not a deletion. */
+/* The whole list, at full height. It used to sit in a 392px window that
+   cut the last row to say there was more below; with the same credit split
+   across two cards, the thing worth seeing was the split, not the cut. */
+
+/* A flat list, soonest deadline first. Some credits sit on two cards
+   each and were folded under one expandable row; the fold hid the deadline,
+   which is the only thing that makes one of them urgent. Each card's credit
+   is its own line now, and the sub-line carries the card and the days left. */
+#credsBody>*+*{border-top:1px solid var(--line-2)}
+.cred-meta .soon{color:var(--warn);font-weight:700}
+.creds{display:flex;flex-direction:column}
+.cred{display:block;width:100%;font:inherit;text-align:left;cursor:pointer;
+  background:none;border:none;padding:13px 0}
+.cred+.cred{border-top:1px solid var(--line-2)}
+.cred-top{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.cred-name{font-size:14px;font-weight:600;color:var(--ink)}
+.cred-meta{display:block;font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:11px;color:var(--ink-3);margin-top:2px;white-space:normal}
+.cred-amt{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:14px;
+  font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;
+  white-space:nowrap}
+/* the bar is the state: it fills as the credit is claimed, and a full bar
+   strikes the row through. Nothing leaves the list — these come back. */
+.cred-track{display:block;height:7px;border-radius:4px;background:var(--sunk);
+  overflow:hidden;margin-top:10px}
+.cred-track i{display:block;height:100%;width:0;background:var(--in);
+  border-radius:4px;transition:width .25s ease}
+.cred-legend{display:flex;justify-content:space-between;gap:10px;margin-top:6px;
+  font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;
+  color:var(--ink-3);font-variant-numeric:tabular-nums}
+.cl-r.soon{color:var(--warn);font-weight:700}
+.cred[aria-pressed="true"] .cred-name,
+.cred[aria-pressed="true"] .cred-amt{text-decoration:line-through;
+  text-decoration-thickness:1.5px;color:var(--ink-3)}
+.cred[aria-pressed="true"] .cl-r{color:var(--in);font-weight:700}
+.credits-card.nosync .cred{cursor:default}
+@media (prefers-reduced-motion: reduce){.cred-track i{transition:none}}
+
+/* ===== logging a meal from the page ===== */
+/* The typed line goes to Claude to be broken into dishes and macros, then
+   straight into doctor_food_log. Nothing is queued and nothing polls: the
+   model runs when he presses Log and at no other time. */
+/* The box takes the full width and the controls sit under it in one row —
+   who on the left, send on the right. They were a half-width chip row with
+   dead space beside it above a box the button was squeezing. */
+.log-in{display:block;width:100%;font:inherit;font-size:15px;color:var(--ink);
+  background:var(--sunk);border:1px solid var(--line);border-radius:10px;
+  padding:12px 13px;resize:vertical;min-height:64px;line-height:1.45}
+.log-in::placeholder{color:var(--ink-3)}
+.log-in:disabled{opacity:.5}
+.log-bar{display:flex;align-items:center;justify-content:space-between;
+  gap:10px;margin-top:10px}
+.log-who{display:flex;gap:6px;min-width:0;overflow-x:auto;
+  scrollbar-width:none}
+.log-who::-webkit-scrollbar{display:none}
+.log-go{flex:none;font:inherit;font-size:14px;font-weight:600;cursor:pointer;
+  padding:9px 20px;border-radius:999px;border:1px solid var(--ink);
+  background:var(--ink);color:var(--on-ink)}
+.log-go:disabled{opacity:.45;cursor:default}
+.log-note{margin:11px 0 0;font-size:13px;line-height:1.45;color:var(--ink-3)}
+.log-note[hidden]{display:none}
+.log-note.bad{color:var(--out)}
+.log-note.good{color:var(--in)}
+
+/* ===== nutrition ===== */
+/* A day is a total until it is tapped, then it is the meals that made it.
+   The detail rides in a second row spanning the table so the columns above
+   stay lined up. */
+.nut-day{cursor:pointer}
+.nut-day:hover td{color:var(--ink)}
+.nut-day td:first-child{display:flex;align-items:center;gap:7px}
+.ncar{flex:none;width:0;height:0;border-left:5px solid var(--ink-3);
+  border-top:4px solid transparent;border-bottom:4px solid transparent;
+  transition:transform .15s ease}
+.nut-day[aria-expanded="true"] .ncar{transform:rotate(90deg)}
+@media (prefers-reduced-motion: reduce){.ncar{transition:none}}
+.nut-meals td{padding:0 0 12px;white-space:normal}
+.meal{display:flex;justify-content:space-between;gap:12px;align-items:baseline;
+  padding:7px 0;border-top:1px solid var(--line-2)}
+.meal:first-child{border-top:none}
+.meal-name{font-size:13px;color:var(--ink-2);line-height:1.4;
+  overflow-wrap:anywhere}
+.meal-num{flex:none;font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums;
+  white-space:nowrap}
+.meal-wrap{padding-left:19px;border-left:2px solid var(--line);
+  margin-left:3px}
+.who{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-2);
+  margin:0 0 6px}
+.who+.tablewrap{margin-bottom:18px}
+.tablewrap:last-child{margin-bottom:0}
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;
+  letter-spacing:.07em;color:var(--ink-3);padding:0 12px 8px 0;white-space:nowrap}
+td{padding:8px 12px 8px 0;border-top:1px solid var(--line-2);white-space:nowrap}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;
+  font-family:"JetBrains Mono",ui-monospace,monospace;padding-right:0}
+th:last-child,td:last-child{padding-right:0}
+.blank{color:var(--ink-3);white-space:normal}
+
+/* ===== job tracking ===== */
+/* Three running totals, all-time. Counts rather than a list: the threads are
+   in Gmail already, and what the page adds is the tally. */
+.jobs{display:flex;flex-direction:column}
+.job-row{display:flex;justify-content:space-between;align-items:baseline;
+  gap:12px;padding:11px 0}
+.job-row:first-child{padding-top:0}
+.job-row:last-child{padding-bottom:0}
+.job-row+.job-row{border-top:1px solid var(--line-2)}
+.job-name{font-size:15px;font-weight:600;color:var(--ink-2)}
+.job-n{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:20px;
+  font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;
+  color:var(--ink)}
+
+/* ===== requires action ===== */
+ul.todo{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;
+  gap:14px}
+ul.todo li{display:flex;gap:10px;align-items:flex-start;font-size:15px;
+  line-height:1.45}
+ul.todo li>div{flex:1;min-width:0}
+.dismiss{flex:none;width:26px;height:26px;padding:0;border-radius:7px;
+  border:1px solid var(--line);background:var(--card);color:var(--ink-3);
+  font:inherit;font-size:16px;line-height:1;cursor:pointer}
+.dismiss:hover{border-color:var(--out);color:var(--out)}
+.all-clear{margin:0;color:var(--ink-3);font-size:14px}
+.tag{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10px;
+  text-transform:uppercase;letter-spacing:.07em;padding:3px 7px;border-radius:5px;
+  flex:none;margin-top:3px;background:var(--warn-soft);color:var(--warn)}
+ul.todo code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12.5px;
+  overflow-wrap:anywhere}
+</style>
+
+<!-- ==========================================================================
+     NOTHING FILLS THESE IN. The page queries Supabase on load and computes
+     every figure, tab, bar, day group and line from what comes back.
+
+     `date` and `synced` are left empty on purpose: the page writes its own
+     date, and the sync line names the real last SimpleFIN load. They are here
+     only so the shape stays valid if the connector is unreachable.
+
+     `complete_from` is the first month whose data can be trusted; the money
+     card marks anything earlier as a partial import rather than a quiet month.
+     It is no longer read from here — the page derives it from the rows — and
+     survives only as a fallback for a run with no data at all.
+     ========================================================================== -->
+
+<script type="application/json" id="meta">
+{"date": "", "synced": "", "complete_from": "2023-06"}
+</script>
+
+<!-- OFFLINE FALLBACK — the current month only, and nothing else.
+
+     This is not the page's data. The page queries Supabase directly and
+     replaces all of this on load; these rows only ever show when the
+     connector cannot be reached, so they are a courtesy, not a record.
+     Trimmed from every month (~2,000 rows, 180 KB) to this one on
+     2026-09-08: carrying years of history to cover a rare degraded state
+     was most of the file for almost no benefit.
+
+     A refresh is never required. Re-snapshot it only if the degraded view
+     starts looking misleadingly stale. -->
+<script type="application/json" id="txns">
+[]
+</script>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="date" id="briefDate">Sunday, September 6 2026</div>
+</header>
+
+<nav class="pagetabs" role="tablist" aria-label="Pages">
+  <button class="ptab" role="tab" data-page="alerts" aria-selected="true">Alerts</button>
+  <button class="ptab" role="tab" data-page="food" aria-selected="false">Food</button>
+  <button class="ptab" role="tab" data-page="balance" aria-selected="false">Balance</button>
+</nav>
+
+<main>
+
+  <div class="page" data-page="alerts">
+  <!-- ============ JOB TRACKING ============ -->
+  <!-- Counted from engine_job_events, which the 1am sweep fills from job mail.
+       All-time on purpose: the tally runs until the search ends. -->
+  <section class="card plain" id="jobsCard">
+    <div class="card-head">
+      <h2>Job Tracking</h2>
+      <span class="count" id="jobsSince">all time</span>
+    </div>
+    <div class="card-body">
+      <div class="jobs">
+        <div class="job-row"><span class="job-name">Applications</span><span class="job-n" id="jobApps">&mdash;</span></div>
+        <div class="job-row"><span class="job-name">Rejections</span><span class="job-n" id="jobRej">&mdash;</span></div>
+        <div class="job-row"><span class="job-name">Interviews</span><span class="job-n" id="jobInt">&mdash;</span></div>
+      </div>
+      <p class="caveat" id="jobsNote" hidden></p>
+    </div>
+  </section>
+
+  <!-- ============ REQUIRES ACTION ============ -->
+  <section class="card plain">
+    <div class="card-head">
+      <h2>Requires Action</h2>
+      <span class="count act" id="todoCount">0</span>
+    </div>
+    <div class="card-body">
+      <ul class="todo" id="todoList">
+      </ul>
+      <p class="all-clear" id="allClear" hidden>Nothing outstanding — everything
+        raised this morning has been dealt with.</p>
+    </div>
+  </section>
+
+  </div>
+
+  <div class="page" data-page="food" hidden>
+  <!-- ============ LOG A MEAL ============ -->
+  <!-- The typed line is parsed by Claude and written to doctor_food_log on
+       the spot. No queue, no temp file, no scheduled session: the only time a
+       model runs is when he presses Log. -->
+  <section class="card plain logger-card" id="loggerCard">
+    <div class="card-head">
+      <h2>Log a meal</h2>
+      <span class="count" id="logCount" hidden></span>
+    </div>
+    <div class="card-body">
+      <textarea class="log-in" id="logText" rows="2"
+        aria-label="What was eaten"
+        placeholder="Two eggs and a latte &mdash; or &ldquo;the burger was yesterday, not today&rdquo;"></textarea>
+      <div class="log-bar">
+        <div class="log-who" id="logWho" role="group" aria-label="Who ate this">
+          <button class="tab" type="button" data-who="Adrien"
+                  aria-pressed="true">Adrien</button>
+          <button class="tab" type="button" data-who="Partner"
+                  aria-pressed="false">Partner</button>
+          <button class="tab" type="button" data-who="Both"
+                  aria-pressed="false">Both</button>
+        </div>
+        <button class="log-go" id="logGo" type="button">Log</button>
+      </div>
+      <p class="log-note" id="logNote" hidden></p>
+    </div>
+  </section>
+
+  <!-- ============ NUTRITION ============ -->
+  <section class="card plain">
+    <div class="card-head">
+      <h2>Nutrition</h2>
+      <span class="count">7 days</span>
+    </div>
+    <div class="card-body">
+      <p class="who">Adrien</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Day</th><th class="num">Cal</th><th class="num">Protein</th><th class="num">Carbs</th><th class="num">Fat</th></tr></thead>
+          <tbody id="nutA"><tr><td class="blank" colspan="5">No entries yet. Log a meal with the doctor skill and it appears here.</td></tr></tbody>
+        </table>
+      </div>
+      <p class="who">Partner</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Day</th><th class="num">Cal</th><th class="num">Protein</th><th class="num">Carbs</th><th class="num">Fat</th></tr></thead>
+          <tbody id="nutB"><tr><td class="blank" colspan="5">No entries yet.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+  </div>
+
+  <div class="page" data-page="balance" hidden>
+  <!-- ============ BUDGET ============ -->
+  <!-- This week's spend is derived from #txns like everything else. The caps
+       are the only figures on the card that are not, so they sit next to it
+       rather than inside the code.
+
+       They are benchmarks — what a household of this size is reckoned to need —
+       not a reading of what is actually spent. A cap drawn from the real
+       averages would rise to meet them and never go red. -->
+  <script type="application/json" id="budget">
+  {"caps": {"dining": 25, "grocery": 110, "shopping": 25}, "weeks": 12}
+  </script>
+
+  <section class="card plain budget-card" id="budgetCard">
+    <div class="card-head">
+      <h2>Budget</h2>
+      <span class="count" id="budTotal">$0 of $160</span>
+    </div>
+    <div class="card-body">
+      <p class="bud-head">
+        <span class="bud-when" id="budWhen">&nbsp;</span>
+        <span class="bud-left" id="budLeft">&nbsp;</span>
+      </p>
+      <div class="buds" id="buds"></div>
+      <div class="bud-hist" id="budHist"></div>
+      <div class="bud-hist-x">
+        <span id="budHistFrom"></span><span id="budHistTo"></span>
+      </div>
+      <p class="caveat" id="budScore"></p>
+    </div>
+  </section>
+  <!-- ============ MONEY + TRANSACTIONS (merged) ============ -->
+  <section class="card money-card" id="moneyCard">
+
+    <div class="stick">
+      <div class="monthnav">
+        <button class="mnav" id="mPrev" type="button" aria-label="Earlier month">&lsaquo;</button>
+        <button class="mnav-mid" id="monthLabel" type="button" aria-label="Jump to the latest month">September 2026</button>
+        <button class="mnav" id="mNext" type="button" aria-label="Later month">&rsaquo;</button>
+      </div>
+      <div class="figs">
+        <div class="fig in">
+          <div class="fig-label">In</div>
+          <div class="fig-val" id="figIn">$0.00</div>
+        </div>
+        <div class="fig out">
+          <div class="fig-label">Out</div>
+          <div class="fig-val" id="figOut">$0.00</div>
+        </div>
+        <div class="fig net">
+          <div class="fig-label">Net</div>
+          <div class="fig-val" id="figNet">$0.00</div>
+        </div>
+      </div>
+      <div class="tabs" id="tabs" role="group" aria-label="Filter by category"></div>
+    </div>
+
+    <div class="card-body">
+
+      <p class="cats-head">Spend by category</p>
+      <div class="cats" id="cats"></div>
+
+      <button class="disclose" id="ledgerToggle" aria-expanded="false" aria-controls="ledger">
+        <span id="ledgerLabel">Show transactions</span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <div class="ledger" id="ledger" hidden></div>
+
+      <p class="caveat" id="gapNote" hidden></p>
+      <p class="caveat" id="syncedLine">Synced</p>
+    </div>
+  </section>
+  <!-- ============ CARD CREDITS ============ -->
+  <section class="card plain credits-card" id="creditsCard">
+    <div class="card-head">
+      <h2>Credits</h2>
+      <span class="count" id="creditsOpen">$50 open</span>
+    </div>
+    <div class="card-body">
+      <div class="creds" id="credsBody">
+        <button class="cred" data-id="card-b-dining" data-card="Card B" data-amt="10" data-period="monthly" data-match="dining" aria-pressed="false">
+          <span class="cred-top">
+            <span class="cred-name">Dining</span>
+            <span class="cred-amt">$10</span>
+          </span>
+          <span class="cred-meta">Card B</span>
+          <span class="cred-track"><i></i></span>
+          <span class="cred-legend"><span class="cl-l">$0 claimed</span><span class="cl-r">$10 to go</span></span>
+        </button>
+        <button class="cred" data-id="card-a-streaming" data-card="Card A" data-amt="25" data-period="monthly" data-match="streaming" aria-pressed="false">
+          <span class="cred-top">
+            <span class="cred-name">Streaming</span>
+            <span class="cred-amt">$25</span>
+          </span>
+          <span class="cred-meta">Card A</span>
+          <span class="cred-track"><i></i></span>
+          <span class="cred-legend"><span class="cl-l">$0 claimed</span><span class="cl-r">$25 to go</span></span>
+        </button>
+        <button class="cred" data-id="card-a-rideshare" data-card="Card A" data-amt="15" data-amt-dec="35" data-period="monthly" aria-pressed="false">
+          <span class="cred-top">
+            <span class="cred-name">Rideshare cash</span>
+            <span class="cred-amt">$15</span>
+          </span>
+          <span class="cred-meta">Card A</span>
+          <span class="cred-track"><i></i></span>
+          <span class="cred-legend"><span class="cl-l">$0 claimed</span><span class="cl-r">$15 to go</span></span>
+        </button>
+      </div>
+    </div>
+  </section>
+  </div>
+
+</main>
+</div>
+
+<script>
+/* ---- the three pages ----
+   Alerts opens first: it is the only page that can be empty, and an empty
+   Alerts page is the answer to "is anything waiting on me". Switching pages
+   scrolls back to the strip if the last one was scrolled down, so a page
+   never opens halfway through itself. */
+(function(){
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.ptab'));
+  var pages = Array.prototype.slice.call(document.querySelectorAll('.page'));
+  var bar = document.querySelector('.pagetabs');
+
+  function show(name){
+    pages.forEach(function(p){ p.hidden = p.getAttribute('data-page') !== name; });
+    tabs.forEach(function(b){
+      b.setAttribute('aria-selected',
+        String(b.getAttribute('data-page') === name));
+    });
+    if(bar && window.scrollY > bar.offsetTop){
+      window.scrollTo({top: bar.offsetTop});
+    }
+  }
+  tabs.forEach(function(b){
+    b.addEventListener('click', function(){ show(b.getAttribute('data-page')); });
+  });
+  window.TEPAGE = show;
+})();
+
+/* ---- header + sync line, from #meta ---- */
+(function(){
+  var meta = {};
+  try { meta = JSON.parse(document.getElementById('meta').textContent) || {}; }
+  catch(e){ meta = {}; }
+  if(meta.date){ document.getElementById('briefDate').textContent = meta.date; }
+  document.getElementById('syncedLine').textContent =
+    meta.synced || 'Sync time unavailable';
+  window.__completeFrom = meta.complete_from || '';
+})();
+
+/* ---- the transaction array, and the edits laid over it ----
+   #txns is the only transaction data on the page. TE parses it once, applies
+   whatever renames and recategorizations he has made from the page, and hands
+   the result to everything that draws money: the money card and the Budget
+   card. Transfers are dropped outright: he does not want the rows, and a card
+   payment is money already counted when the charges it settles posted. */
+var TE = (function(){
+  var base = [], edits = {}, subs = [];
+
+  var raw;
+  try { raw = JSON.parse(document.getElementById('txns').textContent) || []; }
+  catch(e){ raw = []; }
+
+  function normalize(list){
+    return (list || []).map(function(r){
+      return {
+        id:   (r.id === undefined || r.id === null) ? '' : String(r.id),
+        date: String(r.date || ''),
+        desc: String(r.desc || ''),
+        cat:  r.cat || 'uncategorized',
+        amt:  Number(r.amt) || 0,
+        prov: r.prov === true
+      };
+    }).filter(function(r){ return r.date.length >= 7; });
+  }
+  base = normalize(raw);
+
+  function slug(s){
+    return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+  /* A charge is keyed by its database id. The composite is only a fallback for
+     a run that forgot to send ids — it still identifies the row on the page. */
+  function keyOf(r){
+    return r.id ? ('t:' + r.id)
+      : ('t:' + r.date + '|' + r.amt.toFixed(2) + '|' + slug(r.desc));
+  }
+  function nameKey(desc){ return 'm:' + slug(desc); }
+
+  function editFor(r){
+    return edits[keyOf(r)] || edits[nameKey(r.from || r.desc)] || null;
+  }
+
+  /* How many charges carry this name, so the editor can say what "all of
+     them" means before he picks it. */
+  function countByName(desc){
+    var k = slug(desc), n = 0;
+    for(var i = 0; i < base.length; i++){
+      if(slug(base[i].desc) === k){ n++; }
+    }
+    return n;
+  }
+
+  /* The rows everything else reads: edits applied, transfers gone. An edit
+     whose values the database already carries is landed, not pending — that
+     is how the badge clears itself the morning after a sync. */
+  function rows(){
+    var out = [], i, r, e, row;
+    for(i = 0; i < base.length; i++){
+      r = base[i];
+      e = edits[keyOf(r)] || edits[nameKey(r.desc)] || null;
+      row = { id:r.id, date:r.date, desc:r.desc, cat:r.cat, amt:r.amt,
+              from:r.desc, fromCat:r.cat, pending:false, prov:r.prov };
+      if(e){
+        var wantCat = e.cat || 'uncategorized';
+        var landed = (!e.name || e.name === r.desc) && wantCat === r.cat;
+        if(e.name){ row.desc = e.name; }
+        row.cat = wantCat;
+        row.pending = !landed;
+      }
+      if(row.cat === 'transfer'){ continue; }
+      out.push(row);
+    }
+    return out;
+  }
+
+  function notify(){
+    for(var i = 0; i < subs.length; i++){ subs[i](); }
+  }
+
+  return {
+    CATS: ['dining','grocery','shopping','utility','gas','travel','transfer',
+           'income','fee'],
+    rows: rows,
+    slug: slug,
+    keyOf: keyOf,
+    nameKey: nameKey,
+    editFor: editFor,
+    countByName: countByName,
+    /* whole set, from a db snapshot; applied edits are already in the data */
+    setEdits: function(map){ edits = map || {}; notify(); },
+    putEdit: function(id, doc){ edits[id] = doc; notify(); },
+    dropEdit: function(id){ delete edits[id]; notify(); },
+    hasEdit: function(id){ return !!edits[id]; },
+    /* Live rows from the connector replace the embedded ones. An empty or
+       failed result is ignored on purpose: the page keeps what it shipped
+       with rather than blanking. */
+    setRows: function(list){
+      if(!list || !list.length){ return false; }
+      base = normalize(list); notify(); return true;
+    },
+    subscribe: function(fn){ subs.push(fn); }
+  };
+})();
+
+/* ---- complete_from, derived rather than declared ----
+   The first month whose data can be trusted. The money card says so on any
+   month before it, because a month holding spending without the income beside
+   it is a half-import, not a quiet month.
+
+   This used to be a literal in #meta, and it went stale the moment a CSV import
+   filled the 2025-03 - 2026-03 gap: the page went on treating three years of
+   complete history as partial because nobody remembered to lower a constant.
+   A month with outgoings but no income at all is a half-import; the history
+   becomes real in the first month after the last of those.
+
+   Recomputed whenever the rows change, because the offline fallback carries one
+   month and the live data carries three years — a value derived from the
+   fallback would be wrong the moment the connector answers. */
+(function(){
+  function compute(){
+    var rows = TE.rows(), seen = {}, i, r, m;
+    for(i = 0; i < rows.length; i++){
+      r = rows[i];
+      if(r.cat === 'transfer'){ continue; }
+      m = r.date.slice(0, 7);
+      if(!seen[m]){ seen[m] = { out: 0, inn: 0 }; }
+      if(r.amt < 0){ seen[m].out++; } else { seen[m].inn++; }
+    }
+    var keys = Object.keys(seen).sort(), lastBad = '', i2;
+    for(i2 = 0; i2 < keys.length; i2++){
+      if(seen[keys[i2]].out > 0 && seen[keys[i2]].inn === 0){ lastBad = keys[i2]; }
+    }
+    for(i2 = 0; i2 < keys.length; i2++){
+      if(keys[i2] > lastBad){ window.__completeFrom = keys[i2]; return; }
+    }
+  }
+  compute();
+  TE.subscribe(compute);
+})();
+
+/* ---- money: one array in, everything else derived ----
+   The navigator picks a month; the figures, tabs, bars and ledger are all
+   rebuilt for whichever is showing. */
+(function(){
+  var CANON = ['dining','grocery','shopping','utility','gas','travel',
+               'income','fee'];
+  var MON = ['Jan','Feb','Mar','Apr','May','Jun',
+             'Jul','Aug','Sep','Oct','Nov','Dec'];
+  var FULL = ['January','February','March','April','May','June','July',
+              'August','September','October','November','December'];
+  var DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  var card = document.getElementById('moneyCard');
+  var tabBar = document.getElementById('tabs');
+  var catBox = document.getElementById('cats');
+  var ledger = document.getElementById('ledger');
+  var toggle = document.getElementById('ledgerToggle');
+  var label = document.getElementById('ledgerLabel');
+  var figIn = document.getElementById('figIn');
+  var figOut = document.getElementById('figOut');
+  var figNet = document.getElementById('figNet');
+  var gapNote = document.getElementById('gapNote');
+  var mPrev = document.getElementById('mPrev');
+  var mNext = document.getElementById('mNext');
+  var mLabel = document.getElementById('monthLabel');
+  var active = 'all';
+
+  var byMonth = {}, months = [], mi = 0;
+  var store = null;          /* the db collection, once it resolves */
+  var openKey = '';          /* the row whose editor is open, across rebuilds */
+
+  /* Bucket by calendar month, newest first. mi indexes `months`. */
+  function load(){
+    var list = TE.rows();
+    byMonth = {}; months = [];
+    list.forEach(function(r){
+      var k = r.date.slice(0, 7);
+      if(!byMonth[k]){ byMonth[k] = []; months.push(k); }
+      byMonth[k].push(r);
+    });
+    months.sort().reverse();
+    if(mi > months.length - 1){ mi = Math.max(0, months.length - 1); }
+  }
+
+  /* "2026-09-04" as a LOCAL date; new Date(str) parses it as UTC and shifts
+     the day backwards for anyone west of Greenwich. */
+  function parse(str){
+    var p = str.split('-');
+    return new Date(+p[0], (+p[1]) - 1, +p[2]);
+  }
+  function money(n){
+    var s = '$' + Math.abs(n).toLocaleString('en-US',
+      {minimumFractionDigits:2, maximumFractionDigits:2});
+    return n < 0 ? '−' + s : s;
+  }
+  function monthName(key){
+    var p = key.split('-');
+    return FULL[(+p[1]) - 1] + ' ' + p[0];
+  }
+
+  function current(){ return months.length ? byMonth[months[mi]] : []; }
+
+  /* --- bar graph: spend only, biggest first, for the month on screen --- */
+  function buildCats(list){
+    catBox.textContent = '';
+    var spend = {}, max = 0;
+    list.forEach(function(r){
+      if(r.amt < 0){ spend[r.cat] = (spend[r.cat] || 0) + (-r.amt); }
+    });
+    var keys = Object.keys(spend).sort(function(a,b){ return spend[b]-spend[a]; });
+    keys.forEach(function(c){ if(spend[c] > max){ max = spend[c]; } });
+
+    keys.forEach(function(c){
+      var b = document.createElement('button');
+      b.className = 'cat';
+      b.type = 'button';
+      b.setAttribute('data-tab', c);
+      var n = document.createElement('span');
+      n.className = 'cat-name'; n.textContent = c;
+      var bar = document.createElement('span');
+      bar.className = 'cat-bar';
+      var fill = document.createElement('i');
+      fill.style.width = (max ? (spend[c] / max) * 100 : 0) + '%';
+      bar.appendChild(fill);
+      var amt = document.createElement('span');
+      amt.className = 'cat-amt';
+      amt.textContent = '$' + spend[c].toLocaleString('en-US',
+        {minimumFractionDigits:2, maximumFractionDigits:2});
+      b.appendChild(n); b.appendChild(bar); b.appendChild(amt);
+      b.addEventListener('click', function(){ pick(c); });
+      catBox.appendChild(b);
+    });
+  }
+
+  /* --- tab strip: All, then only the categories present that month --- */
+  function buildTabs(list){
+    tabBar.textContent = '';
+    var present = {};
+    list.forEach(function(r){ present[r.cat] = (present[r.cat] || 0) + 1; });
+    var order = CANON.filter(function(c){ return present[c]; });
+    if(present.uncategorized){ order.push('uncategorized'); }
+
+    [{k:'all', l:'All'}].concat(order.map(function(c){ return {k:c, l:c}; }))
+      .forEach(function(t){
+        var b = document.createElement('button');
+        b.className = 'tab';
+        b.type = 'button';
+        b.setAttribute('data-tab', t.k);
+        b.textContent = t.l;
+        b.addEventListener('click', function(){ pick(t.k); });
+        tabBar.appendChild(b);
+      });
+    return present;
+  }
+
+  /* --- the editor: rename a charge, or every charge from that merchant --- */
+  /* The db doc is the retry queue: TEWRITE writes the database straight
+     away, and anything that failed is written again on the next load. */
+  function buildEditor(r, host, btn){
+    var mkey = TE.nameKey(r.from);
+    var tkey = TE.keyOf(r);
+    var same = TE.countByName(r.from);
+    var prev = TE.editFor(r);
+    var name = prev && prev.name ? prev.name : r.desc;
+    var cat = r.cat;
+    var scope = (prev && prev.scope) ? prev.scope : (same > 1 ? 'merchant' : 'txn');
+
+    var box = document.createElement('div');
+    box.className = 'txn-edit';
+
+    var l1 = document.createElement('label');
+    l1.className = 'ed-lab'; l1.textContent = 'Name';
+    var input = document.createElement('input');
+    input.className = 'ed-name'; input.type = 'text'; input.value = name;
+    input.setAttribute('aria-label', 'Transaction name');
+    box.appendChild(l1); box.appendChild(input);
+
+    var b2 = document.createElement('div');
+    b2.className = 'ed-block';
+    var l2 = document.createElement('label');
+    l2.className = 'ed-lab'; l2.textContent = 'Category';
+    var chips = document.createElement('div');
+    chips.className = 'ed-chips';
+    b2.appendChild(l2); b2.appendChild(chips);
+    box.appendChild(b2);
+
+    var catBtns = [];
+    TE.CATS.concat(['uncategorized']).forEach(function(c){
+      var b = document.createElement('button');
+      b.className = 'ed-chip'; b.type = 'button';
+      b.textContent = c;
+      b.setAttribute('data-cat', c);
+      b.setAttribute('aria-pressed', String(c === cat));
+      b.addEventListener('click', function(){
+        cat = c;
+        catBtns.forEach(function(x){
+          x.setAttribute('aria-pressed',
+            String(x.getAttribute('data-cat') === cat));
+        });
+      });
+      catBtns.push(b);
+      chips.appendChild(b);
+    });
+
+    var b3 = document.createElement('div');
+    b3.className = 'ed-block';
+    var l3 = document.createElement('label');
+    l3.className = 'ed-lab'; l3.textContent = 'Applies to';
+    var scopes = document.createElement('div');
+    scopes.className = 'ed-chips';
+    b3.appendChild(l3); b3.appendChild(scopes);
+    box.appendChild(b3);
+
+    var scopeBtns = [];
+    [{k:'txn', l:'This charge'},
+     {k:'merchant', l:'All ' + same + ' from “' + r.from + '”'}]
+      .forEach(function(s){
+        var b = document.createElement('button');
+        b.className = 'ed-chip'; b.type = 'button';
+        b.textContent = s.l;
+        b.setAttribute('data-scope', s.k);
+        b.setAttribute('aria-pressed', String(s.k === scope));
+        b.addEventListener('click', function(){
+          scope = s.k;
+          scopeBtns.forEach(function(x){
+            x.setAttribute('aria-pressed',
+              String(x.getAttribute('data-scope') === scope));
+          });
+        });
+        scopeBtns.push(b);
+        scopes.appendChild(b);
+      });
+
+    var acts = document.createElement('div');
+    acts.className = 'ed-acts';
+    var save = document.createElement('button');
+    save.className = 'ed-btn go'; save.type = 'button'; save.textContent = 'Save';
+    var cancel = document.createElement('button');
+    cancel.className = 'ed-btn'; cancel.type = 'button'; cancel.textContent = 'Cancel';
+    acts.appendChild(save); acts.appendChild(cancel);
+    if(prev){
+      var undo = document.createElement('button');
+      undo.className = 'ed-btn undo'; undo.type = 'button';
+      undo.textContent = 'Undo edit';
+      undo.addEventListener('click', function(){
+        var id = prev.__id;
+        TE.dropEdit(id);
+        openKey = '';
+        store.doc(id)['delete']()['catch'](function(){
+          TE.putEdit(id, prev);
+        });
+      });
+      acts.appendChild(undo);
+    }
+    box.appendChild(acts);
+
+    var note = document.createElement('p');
+    note.className = 'ed-note';
+    note.textContent = 'Written straight to the database. Naming a merchant '
+      + 'also names its future charges.';
+    box.appendChild(note);
+
+    function shut(){
+      openKey = '';
+      box.remove();
+      btn.classList.remove('open');
+    }
+    cancel.addEventListener('click', shut);
+
+    save.addEventListener('click', function(){
+      var clean = input.value.trim() || r.desc;
+      var id = scope === 'merchant' ? mkey : tkey;
+      var doc = {
+        scope: scope,
+        name: clean,
+        cat: cat === 'uncategorized' ? null : cat,
+        match: r.from,
+        from_cat: r.fromCat === 'uncategorized' ? null : r.fromCat,
+        txn_id: r.id || '',
+        date: r.date,
+        amt: r.amt,
+        applied: false,
+        at: new Date().toISOString()
+      };
+      /* switching scope leaves the other doc behind, so clear it */
+      var other = scope === 'merchant' ? tkey : mkey;
+      if(prev && prev.__id === other){
+        TE.dropEdit(other);
+        store.doc(other)['delete']()['catch'](function(){});
+      }
+      openKey = '';
+      doc.__id = id;
+      TE.putEdit(id, doc);
+      var wire = {};
+      for(var k in doc){ if(k !== '__id' && doc.hasOwnProperty(k)){ wire[k] = doc[k]; } }
+      store.doc(id).set(wire)['catch'](function(){
+        TE.dropEdit(id);
+      });
+      /* The db doc above is the local record and the retry queue; this is the
+         real save. It flips the doc to applied on success, so a write that
+         fails stays queued and the next page load tries it again. */
+      if(typeof window.TEWRITE === 'function'){ window.TEWRITE(id, wire); }
+    });
+
+    host.appendChild(box);
+    btn.classList.add('open');
+    input.focus();
+    return box;
+  }
+
+  /* --- the ledger, grouped by day, newest first --- */
+  function buildLedger(list){
+    ledger.textContent = '';
+    ledger.classList.toggle('editable', !!store);
+    if(!list.length){
+      var p0 = document.createElement('p');
+      p0.className = 'caveat';
+      p0.style.marginTop = '0';
+      p0.textContent = 'Nothing in this category this month.';
+      ledger.appendChild(p0);
+      return;
+    }
+    if(store){
+      var hint = document.createElement('p');
+      hint.className = 'ed-hint';
+      hint.textContent = 'Tap a transaction to rename it or set its category.';
+      ledger.appendChild(hint);
+    }
+    var days = [], byDay = {};
+    list.slice().sort(function(a, b){
+      if(a.date !== b.date){ return a.date < b.date ? 1 : -1; }
+      return Math.abs(b.amt) - Math.abs(a.amt);
+    }).forEach(function(r){
+      if(!byDay[r.date]){ byDay[r.date] = []; days.push(r.date); }
+      byDay[r.date].push(r);
+    });
+
+    days.forEach(function(d, i){
+      var when = parse(d);
+      var wrap = document.createElement('div');
+      wrap.className = 'day' + (i === 0 ? ' lead' : '');
+      var head = document.createElement('p');
+      head.className = 'day-label';
+      head.textContent = DAY[when.getDay()] + ' ' + MON[when.getMonth()]
+        + ' ' + when.getDate();
+      wrap.appendChild(head);
+
+      var box = document.createElement('div');
+      box.className = 'txns';
+      byDay[d].forEach(function(r){
+        var host = document.createElement('div');
+        host.className = 'txn-row';
+        var row = document.createElement(store ? 'button' : 'div');
+        row.className = 'txn';
+        if(store){ row.type = 'button'; }
+        var main = document.createElement('div');
+        main.className = 'txn-main';
+        var nm = document.createElement('div');
+        nm.className = 'txn-name'; nm.textContent = r.desc;
+        var mt = document.createElement('div');
+        mt.className = 'txn-meta'; mt.textContent = r.cat;
+        if(r.prov){
+          mt.appendChild(document.createTextNode(' · '));
+          var pv = document.createElement('span');
+          pv.className = 'prov'; pv.textContent = 'pending';
+          mt.appendChild(pv);
+        }
+        if(r.pending){
+          mt.appendChild(document.createTextNode(' · '));
+          var pd = document.createElement('span');
+          pd.className = 'pend'; pd.textContent = 'edited';
+          mt.appendChild(pd);
+        }
+        main.appendChild(nm); main.appendChild(mt);
+        var amt = document.createElement('div');
+        amt.className = 'txn-amt' + (r.amt > 0 ? ' pos' : '');
+        amt.textContent = (r.amt > 0 ? '+' : '') + money(r.amt);
+        row.appendChild(main); row.appendChild(amt);
+        host.appendChild(row);
+        box.appendChild(host);
+
+        if(store){
+          var key = TE.keyOf(r);
+          row.addEventListener('click', function(){
+            if(openKey === key){
+              openKey = '';
+              var open = host.querySelector('.txn-edit');
+              if(open){ open.remove(); }
+              row.classList.remove('open');
+              return;
+            }
+            var live = ledger.querySelector('.txn-edit');
+            if(live){ live.remove(); }
+            var lit = ledger.querySelector('.txn.open');
+            if(lit){ lit.classList.remove('open'); }
+            openKey = key;
+            buildEditor(r, host, row);
+          });
+          if(openKey === key){ buildEditor(r, host, row); }
+        }
+      });
+      wrap.appendChild(box);
+      ledger.appendChild(wrap);
+    });
+  }
+
+  /* Rebuild everything for the month on screen, keeping the chosen category
+     when that month also has it. */
+  function showMonth(){
+    var list = current();
+    var key = months.length ? months[mi] : '';
+
+    mLabel.textContent = key ? monthName(key) : 'No transactions';
+    /* months[] is newest-first, so a HIGHER index is further back */
+    mNext.disabled = mi <= 0;
+    mPrev.disabled = mi >= months.length - 1;
+
+    var present = buildTabs(list);
+    buildCats(list);
+    if(active !== 'all' && !present[active]){ active = 'all'; }
+
+    var from = window.__completeFrom || '';
+    var thin = from && key && key < from;
+    gapNote.hidden = !thin;
+    if(thin){
+      gapNote.textContent = 'The bank feed only reaches back to '
+        + monthName(from) + ', so this month is incomplete — some accounts have '
+        + 'no data before then.';
+    }
+    pick(active);
+  }
+
+  function pick(cat){
+    active = cat;
+    var all = current();
+    var list = cat === 'all' ? all
+      : all.filter(function(r){ return r.cat === cat; });
+
+    var inSum = 0, outSum = 0;
+    list.forEach(function(r){
+      if(r.amt > 0){ inSum += r.amt; } else { outSum += -r.amt; }
+    });
+    figIn.textContent = money(inSum);
+    figOut.textContent = money(outSum);
+    figNet.textContent = money(inSum - outSum);
+
+    Array.prototype.forEach.call(tabBar.children, function(b){
+      b.setAttribute('aria-pressed',
+        String(b.getAttribute('data-tab') === cat));
+    });
+    Array.prototype.forEach.call(catBox.children, function(b){
+      b.classList.toggle('on', b.getAttribute('data-tab') === cat);
+    });
+    card.classList.toggle('picked', cat !== 'all');
+
+    buildLedger(list);
+    label.textContent = (ledger.hidden ? 'Show ' : 'Hide ') + list.length
+      + (list.length === 1 ? ' transaction' : ' transactions');
+  }
+
+  mPrev.addEventListener('click', function(){
+    if(mi < months.length - 1){ mi++; showMonth(); }
+  });
+  mNext.addEventListener('click', function(){
+    if(mi > 0){ mi--; showMonth(); }
+  });
+  mLabel.addEventListener('click', function(){
+    if(mi !== 0){ mi = 0; showMonth(); }
+  });
+
+  toggle.addEventListener('click', function(){
+    ledger.hidden = !ledger.hidden;
+    toggle.setAttribute('aria-expanded', String(!ledger.hidden));
+    pick(active);
+  });
+
+  TE.subscribe(function(){ load(); showMonth(); });
+  load();
+  showMonth();
+
+  /* The edits themselves. Without a db the page is exactly what it was:
+     everything renders, nothing is tappable. */
+  if(!window.claude || typeof claude.use !== 'function'){ return; }
+  claude.use('db').then(function(db){
+    if(!db){ return; }
+    store = db.collection('txn_edits');
+    store.onSnapshot(function(snap){
+      var map = {};
+      for(var i = 0; i < snap.docs.length; i++){
+        var doc = snap.docs[i], d = doc.data() || {};
+        /* a drained edit is already in the data; carrying it would double-apply
+           a rename onto a name that has already changed */
+        if(d.applied === true){ continue; }
+        d.__id = doc.id;
+        map[doc.id] = d;
+      }
+      TE.setEdits(map);
+    }, function(){});
+    load();
+    showMonth();
+  })['catch'](function(){});
+})();
+
+/* ---- budget: three benchmark caps against the week in progress ----
+   The week runs Monday 00:00 local to Sunday night and empties itself on
+   Monday morning. Nothing is stored and nothing has to be reset: the bars are
+   a reading of the rows dated inside the current week, so the week turning
+   over is the reset.
+
+   The caps in #budget are what a household is reckoned to need, not what he
+   spends. That distinction is the whole card — a cap derived from his own
+   averages would rise to meet him and never go red.
+
+   The strip underneath asks the same question of every week already gone.
+   It needs no record of its own: the transactions are the record. */
+(function(){
+  var ORDER = ['dining','grocery','shopping'];
+  var MON = ['Jan','Feb','Mar','Apr','May','Jun',
+             'Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  var caps = {dining:25, grocery:110, shopping:25}, span = 12;
+  try {
+    var cfg = JSON.parse(document.getElementById('budget').textContent) || {};
+    if(cfg.caps){ caps = cfg.caps; }
+    if(cfg.weeks){ span = cfg.weeks; }
+  } catch(e){}
+
+  var capTotal = 0;
+  ORDER.forEach(function(c){ capTotal += (caps[c] || 0); });
+
+  var box = document.getElementById('buds');
+  var badge = document.getElementById('budTotal');
+  var whenEl = document.getElementById('budWhen');
+  var leftEl = document.getElementById('budLeft');
+  var histEl = document.getElementById('budHist');
+  var fromEl = document.getElementById('budHistFrom');
+  var toEl = document.getElementById('budHistTo');
+  var scoreEl = document.getElementById('budScore');
+
+  function pad(n){ return (n < 10 ? '0' : '') + n; }
+  function iso(d){
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+  /* "2026-09-04" as a LOCAL date; new Date(str) reads it as UTC and shifts the
+     day backwards for anyone west of Greenwich — which would drop a Monday
+     charge into the week before. */
+  function parse(str){
+    var p = str.split('-');
+    return new Date(+p[0], (+p[1]) - 1, +p[2]);
+  }
+  /* Monday of the week a date falls in. getDay() calls Sunday 0, so Sunday
+     belongs to the week that began six days ago, not the one starting
+     tomorrow. */
+  function monday(d){
+    var x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+    return x;
+  }
+  function whole(n){ return '$' + Math.round(n).toLocaleString('en-US'); }
+  function short(d){ return MON[d.getMonth()] + ' ' + d.getDate(); }
+
+  /* Every week that carries any row at all, counted separately from the three
+     budgeted categories, so a week with no groceries can be told apart from a
+     week the feed never reached. */
+  function weeks(){
+    var rows = TE.rows(), by = {}, i, r, k;
+    for(i = 0; i < rows.length; i++){
+      r = rows[i];
+      k = iso(monday(parse(r.date)));
+      if(!by[k]){ by[k] = {rows:0, total:0, cat:{}}; }
+      by[k].rows++;
+      if(r.amt < 0 && Object.prototype.hasOwnProperty.call(caps, r.cat)){
+        by[k].cat[r.cat] = (by[k].cat[r.cat] || 0) + (-r.amt);
+        by[k].total += -r.amt;
+      }
+    }
+    return by;
+  }
+
+  function render(){
+    var by = weeks();
+    var thisMon = monday(new Date());
+    var here = by[iso(thisMon)] || {rows:0, total:0, cat:{}};
+
+    whenEl.textContent = 'Week of ' + short(thisMon);
+    badge.textContent = whole(here.total) + ' of ' + whole(capTotal);
+    badge.className = 'count' + (here.total >= capTotal ? ' bad' : '');
+
+    var slack = capTotal - here.total;
+    leftEl.textContent = slack >= 0 ? whole(slack) + ' left'
+                                    : whole(-slack) + ' over';
+    leftEl.className = 'bud-left' + (slack < 0 ? ' over' : '');
+
+    box.textContent = '';
+    ORDER.forEach(function(c){
+      var cap = caps[c] || 0, got = here.cat[c] || 0;
+      /* meeting the cap is already over: the money is spent */
+      var over = got >= cap;
+
+      var row = document.createElement('div');
+      row.className = 'bud-row' + (over ? ' over' : '');
+
+      var line = document.createElement('div');
+      line.className = 'bud-line';
+      var nm = document.createElement('span');
+      nm.className = 'bud-name';
+      nm.textContent = c;
+      var fig = document.createElement('span');
+      fig.className = 'bud-fig';
+      var b = document.createElement('b');
+      b.textContent = whole(got);
+      fig.appendChild(b);
+      fig.appendChild(document.createTextNode(' / ' + whole(cap)));
+      line.appendChild(nm);
+      line.appendChild(fig);
+
+      var track = document.createElement('div');
+      track.className = 'bud-track';
+      var fill = document.createElement('i');
+      fill.style.width = (cap > 0 ? Math.min(100, (got / cap) * 100) : 0) + '%';
+      track.appendChild(fill);
+
+      row.appendChild(line);
+      row.appendChild(track);
+      box.appendChild(row);
+    });
+
+    /* the completed weeks behind him, oldest at the left */
+    var strip = [], walk = new Date(thisMon), i;
+    for(i = 0; i < span; i++){
+      walk.setDate(walk.getDate() - 7);
+      strip.unshift({when: new Date(walk), w: by[iso(walk)] || null});
+    }
+
+    histEl.textContent = '';
+    var under = 0, counted = 0;
+    strip.forEach(function(s){
+      var cell = document.createElement('span');
+      if(!s.w || !s.w.rows){
+        cell.title = short(s.when) + ' — no data';
+      } else {
+        counted++;
+        var ok = s.w.total < capTotal;
+        if(ok){ under++; }
+        cell.className = ok ? 'under' : 'over';
+        cell.title = short(s.when) + ' — ' + whole(s.w.total);
+      }
+      histEl.appendChild(cell);
+    });
+    fromEl.textContent = short(strip[0].when);
+    toEl.textContent = short(strip[strip.length - 1].when);
+
+    scoreEl.textContent = counted
+      ? ('Came in under ' + whole(capTotal) + ' in ' + under + ' of the last '
+         + counted + (counted === 1 ? ' week.' : ' weeks.')
+         + (counted < span ? ' The grey blocks are weeks the feed never'
+                             + ' reached, not weeks you spent nothing.' : ''))
+      : 'No completed weeks on record yet — the blocks fill in as the feed loads.';
+  }
+
+  TE.subscribe(render);
+  render();
+})();
+
+/* ---- card credits: cycle maths, sorting, and what has been claimed ----
+   Claimed comes from the statement credits the card issuer posts, not from
+   ticks. The issuer names each one, so a row's data-match finds its own
+   postings; matching a refund to the charge's amount would miss most of them,
+   because a credit is often capped below the charge.
+
+   A tick still marks a credit fully used. Rideshare cash needs it: it loads
+   into the rideshare app and never appears on the statement. */
+var TECRED = (function(){
+  var card = document.getElementById('creditsCard');
+  var body = document.getElementById('credsBody');
+  var openEl = document.getElementById('creditsOpen');
+  var rows = Array.prototype.slice.call(card.querySelectorAll('.cred'));
+  var MON = ['Jan','Feb','Mar','Apr','May','Jun',
+             'Jul','Aug','Sep','Oct','Nov','Dec'];
+  var used = {};   /* id -> true, only for the cycle in force right now */
+  var fed = {};    /* id -> dollars the issuer has posted against it this cycle */
+
+  function pad(n){ return (n < 10 ? '0' : '') + n; }
+
+  /* The window a credit is sitting in today. A stored tick carries the
+     cycle it was made in, so when the cycle rolls the tick stops
+     counting and the credit comes back on its own — no cron, no reset. */
+  function cycleOf(period, d){
+    var y = d.getFullYear(), m = d.getMonth();
+    if(period === 'monthly'){ return y + '-' + pad(m + 1); }
+    if(period === 'quarterly'){ return y + '-Q' + (Math.floor(m / 3) + 1); }
+    if(period === 'semiannual'){ return y + '-H' + (m < 6 ? 1 : 2); }
+    return String(y);
+  }
+
+  /* Last day the credit can still be spent in that window. */
+  function endOf(period, d){
+    var y = d.getFullYear(), m = d.getMonth();
+    if(period === 'monthly'){ return new Date(y, m + 1, 0); }
+    if(period === 'quarterly'){ return new Date(y, Math.floor(m / 3) * 3 + 3, 0); }
+    if(period === 'semiannual'){ return new Date(y, m < 6 ? 6 : 12, 0); }
+    return new Date(y, 12, 0);
+  }
+
+  function money(n){
+    return '$' + n.toLocaleString('en-US', {maximumFractionDigits:0});
+  }
+
+  /* A credit worth more in one month than the rest: rideshare cash is $15
+     a month and $35 in December. */
+  function amtOf(row, d){
+    var dec = row.getAttribute('data-amt-dec');
+    return parseFloat(dec && d.getMonth() === 11 ? dec
+                                                 : row.getAttribute('data-amt'));
+  }
+
+  /* Cents only where a credit actually has them. */
+  function exact(n){
+    return '$' + n.toLocaleString('en-US', {
+      minimumFractionDigits: (n % 1 === 0) ? 0 : 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  /* Soonest deadline first. Every credit is its own row: the one that sits on
+     both cards used to fold together, and the fold hid the deadline, which is
+     the only thing that tells you which one to spend this month. */
+  function render(){
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    var list = [], open = 0, i;
+
+    for(i = 0; i < rows.length; i++){
+      var row = rows[i];
+      var period = row.getAttribute('data-period');
+      var end = endOf(period, today);
+      var amt = amtOf(row, today);
+      var id = row.getAttribute('data-id');
+      var claimed = used[id] === true ? amt
+        : Math.min(amt, Math.round((fed[id] || 0) * 100) / 100);
+      /* within a cent counts as full, so a rounding penny never leaves a
+         credit reading "$0.01 to go" */
+      var isUsed = claimed >= amt - 0.005;
+      var left = Math.max(0, amt - claimed);
+      var days = Math.max(0, Math.round((end - today) / 86400000));
+
+      row.setAttribute('aria-pressed', String(isUsed));
+      row.querySelector('.cred-amt').textContent = exact(amt);
+      row.querySelector('.cred-track i').style.width =
+        (amt > 0 ? (claimed / amt) * 100 : 0) + '%';
+      row.querySelector('.cl-l').textContent = exact(claimed) + ' claimed';
+      var right = row.querySelector('.cl-r');
+      right.textContent = isUsed ? 'Claimed' : exact(left) + ' to go';
+      right.className = 'cl-r' + (!isUsed && days <= 14 ? ' soon' : '');
+
+      /* the card it comes from, and how long is left on this cycle */
+      var meta = row.querySelector('.cred-meta');
+      meta.textContent = row.getAttribute('data-card') + ' · ';
+      var when = document.createElement('span');
+      when.textContent = days + (days === 1 ? ' day left' : ' days left');
+      if(days <= 14){ when.className = 'soon'; }
+      meta.appendChild(when);
+      meta.appendChild(document.createTextNode(
+        ' · ends ' + MON[end.getMonth()] + ' ' + end.getDate()
+        + (row.getAttribute('data-match') ? '' : ' · ticked by hand')));
+
+      open += left;
+      list.push({row: row, end: end, amt: amt});
+    }
+
+    /* soonest first, and the bigger credit first where two end together */
+    list.sort(function(a, b){ return (a.end - b.end) || (b.amt - a.amt); });
+
+    body.textContent = '';
+    for(i = 0; i < list.length; i++){ body.appendChild(list[i].row); }
+
+    openEl.textContent = money(open) + ' open';
+  }
+
+  render();
+
+  /* "2026-09-04" as a LOCAL date, so a posting on the 1st lands in the month
+     it says rather than the day before. */
+  function parse(str){
+    var p = String(str).split('-');
+    return new Date(+p[0], (+p[1]) - 1, +p[2]);
+  }
+
+  /* Rows from the live query: {card, d, amt, desc}. A posting counts toward
+     the first row on the same card whose match is in its description, and only
+     inside the cycle in force today - last quarter's credit is history. */
+  function setFeed(list){
+    var today = new Date(), i, j, t, row, m, id, period;
+    fed = {};
+    for(i = 0; i < (list || []).length; i++){
+      t = list[i];
+      var desc = String(t.desc || '').toLowerCase();
+      var amt = Number(t.amt);
+      if(!(amt > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(String(t.d || ''))){ continue; }
+      for(j = 0; j < rows.length; j++){
+        row = rows[j];
+        m = row.getAttribute('data-match');
+        if(!m || row.getAttribute('data-card') !== t.card){ continue; }
+        if(desc.indexOf(m) === -1){ continue; }
+        id = row.getAttribute('data-id');
+        period = row.getAttribute('data-period');
+        if(cycleOf(period, parse(t.d)) === cycleOf(period, today)){
+          fed[id] = (fed[id] || 0) + amt;
+        }
+        break;
+      }
+    }
+    render();
+  }
+
+  if(!window.claude || typeof claude.use !== 'function'){
+    card.classList.add('nosync');
+    return { setFeed: setFeed };
+  }
+
+  claude.use('db').then(function(db){
+    if(!db){ card.classList.add('nosync'); return; }
+    var creds = db.collection('credits');
+
+    creds.onSnapshot(function(snap){
+      var today = new Date();
+      used = {};
+      for(var i = 0; i < snap.docs.length; i++){
+        var doc = snap.docs[i], d = doc.data() || {};
+        var row = card.querySelector('.cred[data-id="' + doc.id + '"]');
+        if(!row){ continue; }
+        var period = row.getAttribute('data-period');
+        if(d.used === true && d.cycle === cycleOf(period, today)){
+          used[doc.id] = true;
+        }
+      }
+      render();
+    }, function(){ card.classList.add('nosync'); });
+
+    for(var i = 0; i < rows.length; i++){
+      (function(row){
+        row.addEventListener('click', function(){
+          var id = row.getAttribute('data-id');
+          var next = used[id] !== true;
+          used[id] = next;
+          render();
+          creds.doc(id).set({
+            used: next,
+            claimed: next ? amtOf(row, new Date()) : 0,
+            cycle: cycleOf(row.getAttribute('data-period'), new Date()),
+            at: new Date().toISOString()
+          })['catch'](function(){
+            used[id] = !next;
+            render();
+          });
+        });
+      })(rows[i]);
+    }
+  })['catch'](function(){ card.classList.add('nosync'); });
+
+  return { setFeed: setFeed };
+})();
+
+/* ---- requires action ----
+   The list is data, not markup: the live query replaces it wholesale. Whatever
+   the page shipped with stands in until that arrives, so the card is never
+   blank while the connector is still answering. Dismissals live in the db
+   store keyed by data-id, and the id carries the date, so dismissing a thing
+   today does not bury the same thing tomorrow. */
+var TEACT = (function(){
+  var list = document.getElementById('todoList');
+  var countEl = document.getElementById('todoCount');
+  var clearEl = document.getElementById('allClear');
+  var card = list.closest('section.card');
+  var items = [], gone = {}, actions = null, loaded = false;
+
+  function collect(){
+    items = Array.prototype.slice.call(list.querySelectorAll('li'));
+    items.forEach(function(li){
+      if(li.querySelector('.dismiss')){ return; }
+      var b = document.createElement('button');
+      b.className = 'dismiss';
+      b.type = 'button';
+      b.setAttribute('aria-label', 'Dismiss this item');
+      b.appendChild(document.createTextNode('×'));
+      li.appendChild(b);
+      b.addEventListener('click', function(){
+        var id = li.getAttribute('data-id');
+        gone[id] = true;
+        render();
+        if(!actions){ return; }
+        actions.doc(id).set({ dismissed: true, at: new Date().toISOString() })
+          ['catch'](function(){ delete gone[id]; render(); });
+      });
+    });
+  }
+
+  function render(){
+    var live = 0;
+    for(var i = 0; i < items.length; i++){
+      var off = gone[items[i].getAttribute('data-id')] === true;
+      items[i].hidden = off;
+      if(!off){ live++; }
+    }
+    countEl.textContent = live === 0 ? 'clear' : String(live);
+    countEl.className = live === 0 ? 'count' : 'count act';
+    list.hidden = live === 0;
+    clearEl.hidden = live !== 0;
+    /* The card used to remove itself when everything was dealt with, which
+       worked when it sat under five others. It is now the whole Alerts page,
+       and a page with nothing on it cannot be told from a page that failed to
+       load, so the all-clear line stands in its place instead. */
+    if(card){ card.hidden = false; }
+  }
+
+  function setItems(defs){
+    loaded = true;
+    list.textContent = '';
+    for(var i = 0; i < defs.length; i++){
+      var d = defs[i];
+      var li = document.createElement('li');
+      li.setAttribute('data-id', d.id);
+      var tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.textContent = d.tag;
+      var body = document.createElement('div');
+      body.textContent = d.text;
+      if(d.detail){
+        var sm = document.createElement('div');
+        sm.className = 'txn-meta';
+        sm.textContent = d.detail;
+        body.appendChild(sm);
+      }
+      li.appendChild(tag);
+      li.appendChild(body);
+      list.appendChild(li);
+    }
+    collect();
+    render();
+  }
+
+  collect();
+  render();
+
+  if(window.claude && typeof claude.use === 'function'){
+    claude.use('db').then(function(db){
+      if(!db){ return; }
+      actions = db.collection('actions');
+      actions.onSnapshot(function(snap){
+        gone = {};
+        for(var i = 0; i < snap.docs.length; i++){
+          var d = snap.docs[i].data() || {};
+          if(d.dismissed === true){ gone[snap.docs[i].id] = true; }
+        }
+        render();
+      }, function(){});
+      collect();
+    })['catch'](function(){});
+  }
+
+  return { setItems: setItems };
+})();
+
+</script>
+
+<script>
+/* ==========================================================================
+   LIVE DATA — every card reads Supabase through the viewer's own connector.
+
+   This is what makes the page self-sufficient. Nothing writes it on a
+   schedule any more: it queries the database itself each time it is opened,
+   so the markup is permanent and edits made to it survive. A routine that
+   rewrote this file every morning is what used to make design changes
+   expensive and temporary.
+
+   The transactions embedded in #txns above stay as the offline fallback and
+   render first. Every card degrades to what it shipped with rather than to
+   nothing, and each failure names the one action that fixes it.
+   ========================================================================== */
+(function(){
+  var PROJECT = '<project-ref>';
+  var SERVER  = 'Supabase';
+  var TOOL    = 'execute_sql';
+  var CATS = ['dining','grocery','shopping','utility','gas','travel',
+              'transfer','income','fee'];
+
+  var line = document.getElementById('syncedLine');
+  var staticSync = line ? line.textContent : '';
+  var sweptAt = '', liveRows = 0;
+
+  /* ---------- the masthead date, which never needed a routine ---------- */
+  (function(){
+    var el = document.getElementById('briefDate');
+    if(!el){ return; }
+    try {
+      el.textContent = new Date().toLocaleDateString('en-US', {
+        timeZone: 'America/Los_Angeles', weekday: 'long',
+        month: 'long', day: 'numeric', year: 'numeric'
+      }).replace(/,(\s+\d{4})$/, '$1');
+    } catch(e){}
+  })();
+
+  function syncLine(){
+    var bits = [];
+    bits.push(sweptAt ? ('Synced ' + sweptAt) : staticSync);
+    if(liveRows){ bits.push(liveRows + ' rows live'); }
+    if(line){ line.textContent = bits.join(' · '); }
+  }
+
+  /* Rows arrive wrapped in a prose envelope and an <untrusted-data-...>
+     boundary, so the JSON is hunted for rather than assumed at a path. */
+  function findRows(v, d){
+    if(v == null || d > 6){ return null; }
+    if(Array.isArray(v)){
+      var f = v[0];
+      if(!(v.length && f && typeof f === 'object' && !Array.isArray(f))){
+        return null;
+      }
+      /* `res.content` is an array of {type, text} envelope blocks, and it is
+         an array of objects, so a naive walk returns it as the answer. It is
+         the wrapper, never the rows. */
+      if(typeof f.type === 'string' && typeof f.text === 'string'){ return null; }
+      return v;
+    }
+    if(typeof v === 'string'){
+      var cand = [], t = v.trim(), m, i, j;
+      if(t.charAt(0) === '[' || t.charAt(0) === '{'){ cand.push(t); }
+      m = v.match(/<untrusted-data-[^>]*>\s*([\s\S]*?)\s*<\/untrusted-data-/);
+      if(m){ cand.push(m[1].trim()); }
+      i = v.indexOf('['); j = v.lastIndexOf(']');
+      if(i >= 0 && j > i){ cand.push(v.slice(i, j + 1)); }
+      for(var k = 0; k < cand.length; k++){
+        try { var got = findRows(JSON.parse(cand[k]), d + 1); if(got){ return got; } }
+        catch(e){}
+      }
+      return null;
+    }
+    if(typeof v === 'object'){
+      for(var key in v){
+        if(!Object.prototype.hasOwnProperty.call(v, key)){ continue; }
+        var r = findRows(v[key], d + 1);
+        if(r){ return r; }
+      }
+    }
+    return null;
+  }
+
+  /* An empty result set is a legitimate answer — no food logged, nothing
+     outstanding — and must not read as a failure. findRows returns null for
+     both cases, so an empty array is recognised separately. */
+  function isEmptyResult(res){
+    var p = res && res.payload, str = null;
+    if(Array.isArray(p)){ return p.length === 0; }
+    if(typeof p === 'string'){ str = p; }
+    else if(p && typeof p === 'object' && typeof p.result === 'string'){ str = p.result; }
+    else if(res && res.content && res.content[0] &&
+            typeof res.content[0].text === 'string'){ str = res.content[0].text; }
+    return typeof str === 'string' && /\[\s*\]/.test(str);
+  }
+
+  /* Each code has its own fix, so each gets its own sentence. One catch-all
+     banner would hide the single action that would repair the page. */
+  function explain(code){
+    switch(code){
+      case 'needs_reauth':         return 'reconnect Supabase in claude.ai Settings, Connectors';
+      case 'server_not_connected': return 'add Supabase in claude.ai Settings, Connectors';
+      case 'selection_required':   return 'more than one Supabase connector, pick one';
+      case 'not_in_manifest':
+      case 'blocked_by_policy':
+      case 'approval_required':    return 'live access not permitted for this view';
+      case 'not_granted':
+      case 'capability_disabled':
+      case 'capability_removed':   return null;
+      default:                     return 'live refresh failed';
+    }
+  }
+
+  /* When a card cannot read its reply, park a sketch of what actually came
+     back so it can be read from a session with read_db. Cheaper and more
+     accurate than asking Adrien to describe a page. */
+  var diag = null;
+  if(window.claude && typeof claude.use === 'function'){
+    claude.use('db').then(function(db){ if(db){ diag = db.collection('diag'); } },
+                          function(){});
+  }
+  function sketch(v, d){
+    if(v === null){ return 'null'; }
+    if(Array.isArray(v)){
+      return 'array[' + v.length + ']' +
+        (v.length && d < 3 ? '<' + sketch(v[0], d + 1) + '>' : '');
+    }
+    var t = typeof v;
+    if(t === 'string'){
+      return 'string(' + v.length + '):' + v.slice(0, 200) +
+             (v.length > 400 ? ' ...TAIL... ' + v.slice(-200) : '');
+    }
+    if(t === 'object'){
+      var ks = [];
+      try { ks = Object.keys(v).slice(0, 8); } catch(e){}
+      if(d >= 3){ return 'object{' + ks.join(',') + '}'; }
+      return 'object{' + ks.map(function(k){
+        return k + ':' + sketch(v[k], d + 1);
+      }).join(', ') + '}';
+    }
+    return t + ':' + String(v).slice(0, 60);
+  }
+  function park(name, doc){
+    if(!diag){ return; }
+    try { doc.at = new Date().toISOString(); diag.doc(name).set(doc); } catch(e){}
+  }
+
+  if(!window.claude || typeof claude.use !== 'function'){ return; }
+
+  claude.use('mcp').then(function(mcp){
+    if(!mcp){ return; }
+
+    /* One call per card, so a failure is contained to the card it feeds.
+
+       callTool, not watchTool: four watches registered on the same
+       (server, tool) delivered each other's results, and the money card drew
+       the one-row answer from the sync query — one row with no date, which
+       filtered down to an empty card reading "1 rows live". A promise resolves
+       once with its own result and cannot be crossed that way.
+
+       `key` names a column only this query returns. Rows that do not carry it
+       came from somewhere else and are ignored rather than drawn, so a card can
+       never again render another card's data. */
+    /* Search the places a result can carry rows, in order, instead of walking
+       the whole envelope: payload first, then structuredContent, then the text
+       of each content block. Walking blind is what found `content` first. */
+    function rowsFrom(res){
+      if(!res){ return null; }
+      var tries = [res.payload, res.structuredContent], c = res.content || [];
+      for(var i = 0; i < c.length; i++){
+        if(c[i] && typeof c[i].text === 'string'){ tries.push(c[i].text); }
+      }
+      for(var j = 0; j < tries.length; j++){
+        var got = findRows(tries[j], 0);
+        if(got){ return got; }
+      }
+      return null;
+    }
+
+    function ask(sql, key, onRows, onFail){
+      mcp.callTool(SERVER, TOOL, { project_id: PROJECT, query: sql },
+                   { cache: { staleTime: 60000 } })
+        .then(function(res){
+          var rows = rowsFrom(res);
+          if(rows && rows.length && !(key in rows[0])){
+            park(key, { kind: 'wrong-shape', want: key,
+                        got: Object.keys(rows[0]).join(','),
+                        n: rows.length });
+            if(onFail){ onFail('reply not understood'); }
+            return;
+          }
+          if(rows){ onRows(rows); return; }
+          if(isEmptyResult(res)){ onRows([]); return; }
+          park(key, { kind: 'unparsed',
+                      payload: sketch(res && res.payload, 0),
+                      structured: sketch(res && res.structuredContent, 0),
+                      firstText: sketch(res && res.content && res.content[0] &&
+                                        res.content[0].text, 0),
+                      blocks: (res && res.content || []).length });
+          if(onFail){ onFail('reply not understood'); }
+        })['catch'](function(err){
+          park(key, { kind: 'rejected', code: (err || {}).code,
+                      message: String((err || {}).message || '').slice(0, 300) });
+          var why = explain(err && err.code);
+          if(why && onFail){ onFail(why); }
+        });
+    }
+
+    /* ---------------- money + budget ---------------- */
+    /* Named and re-runnable: a save has to be able to pull the rows again.
+       callTool resolves once and never refreshes on its own, so without this
+       an edit would be written to the database and never read back. */
+    function loadTxns(after){
+      ask(
+        'select id, date, description, category, amount, pending ' +
+        'from accountant_transactions order by date desc, id desc',
+        'amount',
+        function(rows){
+          var shaped = rows.map(function(r){
+            return { id: r.id, date: r.date, desc: r.description,
+                     cat: r.category, amt: r.amount, prov: r.pending === true };
+          });
+          var ok = TE.setRows(shaped);
+          if(ok){ liveRows = rows.length; syncLine(); }
+          if(after){ after(ok); }
+        },
+        function(why){
+          if(line){ line.textContent = staticSync + ' · ' + why; }
+          if(after){ after(false); }
+        }
+      );
+    }
+    loadTxns();
+
+    /* ---------------- when the bank feed last loaded ----------------
+       This is the `synced` line: the real SimpleFIN load, not the page's own
+       read, which would always look current and so would say nothing. */
+    ask(
+      /* FM drops to_char's zero padding, so this reads "Sep 8 at 7:30 AM"
+         rather than "Sep 08 at 07:30 AM". */
+      "select to_char(max(ran_at) at time zone 'America/Los_Angeles'," +
+      "'Mon FMDD') as swept_d, to_char(max(ran_at) at time zone " +
+      "'America/Los_Angeles','FMHH12:MI AM') as swept_t " +
+      "from accountant_phase_runs where mode = 'sweep' " +
+      /* a failed run still writes a row, with zero rows seen — that is not a
+         sync, and counting it once hid a nine-hour gap behind a fresh time */
+      "and rows_inserted + rows_skipped > 0",
+      'swept_d',
+      function(rows){
+        var r = rows[0];
+        sweptAt = (r && r.swept_d) ? (r.swept_d + ' at ' + r.swept_t) : '';
+        if(!sweptAt){ staticSync = 'Never synced'; }
+        syncLine();
+      },
+      function(){}
+    );
+
+    /* ---------------- nutrition, both people, 7 days ----------------
+       Wrapped in a named function because logging a meal has to be able to
+       pull the table again; callTool resolves once and never refreshes on its
+       own, so without this a meal would be written and not shown.
+
+       The date window is Pacific, not `current_date`: this database runs in
+       UTC, so between 5pm and midnight Pacific `current_date` is already
+       tomorrow and the window slides a day early. */
+    function loadNutrition(){
+    ask(
+      "select f.person, f.id::text as id, f.date::text as d, " +
+      "to_char(f.date,'Mon DD') as day, f.meal_group_id::text as grp, " +
+      "f.meal, round(f.calories) as cal, round(f.protein_g) as p, " +
+      "round(f.carbs_g) as c, round(f.fat_g) as f2 " +
+      "from doctor_food_log f " +
+      "where f.date >= (now() at time zone 'America/Los_Angeles')::date - 6 " +
+      "order by f.date desc, f.person, f.id",
+      'person',
+      function(rows){
+        function num(v){ return (v === null || v === undefined) ? null : Number(v); }
+
+        /* The rows arrive one per meal. A day is totalled here rather
+           than in SQL so the meals behind the total are already on the page
+           when he taps it — no second query to open a day. */
+        function byDay(mine){
+          var days = [], seen = {}, i, r, k;
+          for(i = 0; i < mine.length; i++){
+            r = mine[i];
+            k = r.d || r.day;
+            if(!seen[k]){
+              seen[k] = {key:k, day:r.day, cal:0, p:0, c:0, f:0, meals:[]};
+              days.push(seen[k]);
+            }
+            seen[k].cal += num(r.cal) || 0;
+            seen[k].p += num(r.p) || 0;
+            seen[k].c += num(r.c) || 0;
+            seen[k].f += num(r.f2) || 0;
+            seen[k].meals.push(r);
+          }
+          return days;
+        }
+
+        function mealList(day){
+          var box = document.createElement('div');
+          box.className = 'meal-wrap';
+          day.meals.forEach(function(m){
+            var row = document.createElement('div');
+            row.className = 'meal';
+            var nm = document.createElement('span');
+            nm.className = 'meal-name';
+            nm.textContent = m.meal || '—';
+            var fig = document.createElement('span');
+            fig.className = 'meal-num';
+            fig.textContent = (num(m.cal) || 0) + ' cal · '
+              + (num(m.p) || 0) + 'g P';
+            row.appendChild(nm);
+            row.appendChild(fig);
+            box.appendChild(row);
+          });
+          return box;
+        }
+
+        function fill(id, who){
+          var tb = document.getElementById(id);
+          if(!tb){ return; }
+          var mine = rows.filter(function(r){
+            return String(r.person || '').toLowerCase() === who;
+          });
+          tb.textContent = '';
+          if(!mine.length){
+            var tr0 = document.createElement('tr');
+            var td0 = document.createElement('td');
+            td0.className = 'blank';
+            td0.setAttribute('colspan', '5');
+            td0.textContent = 'No entries yet. Log a meal above and it '
+              + 'appears here.';
+            tr0.appendChild(td0); tb.appendChild(tr0);
+            return;
+          }
+
+          byDay(mine).forEach(function(day){
+            var tr = document.createElement('tr');
+            tr.className = 'nut-day';
+            tr.setAttribute('aria-expanded', 'false');
+
+            var dayTd = document.createElement('td');
+            var car = document.createElement('i');
+            car.className = 'ncar';
+            car.setAttribute('aria-hidden', 'true');
+            var lab = document.createElement('span');
+            lab.textContent = day.day || '—';
+            dayTd.appendChild(car);
+            dayTd.appendChild(lab);
+            tr.appendChild(dayTd);
+
+            [day.cal, day.p, day.c, day.f].forEach(function(v){
+              var td = document.createElement('td');
+              td.className = 'num';
+              td.textContent = String(Math.round(v));
+              tr.appendChild(td);
+            });
+            tb.appendChild(tr);
+
+            var det = document.createElement('tr');
+            det.className = 'nut-meals';
+            det.hidden = true;
+            var cell = document.createElement('td');
+            cell.setAttribute('colspan', '5');
+            cell.appendChild(mealList(day));
+            det.appendChild(cell);
+            tb.appendChild(det);
+
+            tr.addEventListener('click', function(){
+              det.hidden = !det.hidden;
+              tr.setAttribute('aria-expanded', String(!det.hidden));
+            });
+          });
+        }
+        fill('nutA', 'adrien');
+        fill('nutB', 'partner');
+        /* kept so a correction has real rows, with ids, to aim at */
+        window.__TEFOOD = rows.map(function(r){
+          return { id: r.id, person: r.person, date: r.d, meal: r.meal,
+                   sitting: r.grp || null,
+                   calories: num(r.cal), protein_g: num(r.p),
+                   carbs_g: num(r.c), fat_g: num(r.f2) };
+        });
+      },
+      function(){}
+    );
+    }
+    loadNutrition();
+
+    /* ---------------- logging a meal, from the page ----------------
+       He types a line; Claude breaks it into dishes with macros; the rows go
+       straight into doctor_food_log. There is no queue and nothing scheduled:
+       the model runs on the button press and at no other time, so an unused
+       page costs nothing.
+
+       The nutrition library is sent along as reference so the same food is
+       not re-estimated differently every time — the whole point of that
+       table — and anything genuinely new is added to it. */
+    (function(){
+      var textEl = document.getElementById('logText');
+      var goEl = document.getElementById('logGo');
+      var noteEl = document.getElementById('logNote');
+      var whoBar = document.getElementById('logWho');
+      var countEl = document.getElementById('logCount');
+      if(!textEl || !goEl){ return; }
+
+      var who = 'Adrien', busy = false, sample = null;
+
+      Array.prototype.forEach.call(whoBar.children, function(b){
+        b.addEventListener('click', function(){
+          who = b.getAttribute('data-who');
+          Array.prototype.forEach.call(whoBar.children, function(x){
+            x.setAttribute('aria-pressed',
+              String(x.getAttribute('data-who') === who));
+          });
+        });
+      });
+
+      /* Both is not a person the table accepts — it is two rows. */
+      function people(){
+        return who === 'Both' ? ['Adrien', 'Partner'] : [who];
+      }
+
+      function say(msg, kind){
+        noteEl.textContent = msg || '';
+        noteEl.className = 'log-note' + (kind ? ' ' + kind : '');
+        noteEl.hidden = !msg;
+      }
+      function lock(on){
+        busy = on;
+        goEl.disabled = on;
+        textEl.disabled = on;
+        goEl.textContent = on ? 'Working' : 'Log';
+      }
+
+      /* execute_sql takes a query string and offers no parameter binding, so
+         every value is escaped here, every number forced to a number, and
+         every id and date checked against a pattern before it reaches SQL.
+         Anything failing a check is dropped rather than sent. */
+      function lit(v){ return "'" + String(v).replace(/'/g, "''") + "'"; }
+      function num(v){
+        var n = Number(v);
+        return isFinite(n) && n >= 0 ? Math.round(n * 10) / 10 : 0;
+      }
+      function isId(v){
+        return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+          .test(String(v || ''));
+      }
+      function isDay(v){ return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')); }
+
+      /* A sitting of several foods is several rows sharing one id. The id is
+         minted here rather than asked of Claude, because a model handing back
+         a uuid is a model inventing an identifier. */
+      function uuid(){
+        try {
+          if(window.crypto && crypto.randomUUID){ return crypto.randomUUID(); }
+        } catch(e){}
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,
+          function(c){
+            var r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : ((r & 0x3) | 0x8)).toString(16);
+          });
+      }
+
+      /* portion_fraction is a note on how the figure was reached, never a
+         multiplier to apply: the row's own numbers are already what was
+         eaten. A missing or nonsense value means one whole serving. */
+      function frac(v){
+        var n = Number(v);
+        return (isFinite(n) && n > 0 && n <= 100) ? Math.round(n * 1000) / 1000
+                                                  : 1;
+      }
+
+      /* Today in Pacific, read off the viewer's own clock rather than the
+         database's. The database runs in UTC, and every wrong date so far has
+         come from something reading a UTC clock and calling it today. */
+      function todayPT(){
+        try {
+          return new Date().toLocaleDateString('en-CA',
+            { timeZone: 'America/Los_Angeles' });
+        } catch(e){
+          return new Date().toISOString().slice(0, 10);
+        }
+      }
+
+      function dayOf(d){
+        return isDay(d) ? String(d) : todayPT();
+      }
+
+      function insertSql(dishes){
+        var vals = [], i, j, d, whom = people();
+
+        /* Which foods were eaten together. Claude numbers the sittings; a
+           number carrying more than one food gets an id, a lone food stays
+           null. Each person gets their own id for the same sitting — a group
+           is one plate, not one table. */
+        var count = {}, ids = {};
+        for(i = 0; i < dishes.length; i++){
+          var k = String(dishes[i].sitting === undefined ? i
+                                                        : dishes[i].sitting);
+          count[k] = (count[k] || 0) + 1;
+        }
+
+        for(i = 0; i < dishes.length; i++){
+          d = dishes[i];
+          var meal = String(d.meal || '').trim();
+          if(!meal){ continue; }
+          var key = String(d.sitting === undefined ? i : d.sitting);
+          for(j = 0; j < whom.length; j++){
+            var grp = 'null';
+            if(count[key] > 1){
+              var slot = key + '|' + whom[j];
+              if(!ids[slot]){ ids[slot] = uuid(); }
+              grp = lit(ids[slot]) + '::uuid';
+            }
+            vals.push('(' + lit(meal) + ', ' + lit(whom[j]) + ', ' +
+              lit(dayOf(d.date)) + '::date, ' +
+              num(d.calories) + ', ' + num(d.protein_g) + ', ' +
+              num(d.carbs_g) + ', ' + num(d.fat_g) + ', ' +
+              num(d.sugar_g) + ', ' +
+              (d.is_estimated === false ? 'false' : 'true') + ', ' +
+              frac(d.portion_fraction) + ', ' + grp + ')');
+          }
+        }
+        if(!vals.length){ return null; }
+        return 'insert into doctor_food_log '
+          + '(meal, person, date, calories, protein_g, carbs_g, fat_g, '
+          + 'sugar_g, is_estimated, portion_fraction, meal_group_id)'
+          + ' values ' + vals.join(', ') + ';';
+      }
+
+      /* One statement per edited row. Only the fields Claude actually named
+         are written, so "it was the 11th" moves the date and leaves the
+         macros alone. */
+      function editSql(edits){
+        var out = [], i;
+        for(i = 0; i < (edits || []).length; i++){
+          var e = edits[i];
+          if(!isId(e.id)){ continue; }
+          var sets = [];
+          if(isDay(e.date)){ sets.push('date = ' + lit(e.date) + '::date'); }
+          if(e.meal){ sets.push('meal = ' + lit(String(e.meal).trim())); }
+          ['calories','protein_g','carbs_g','fat_g','sugar_g'].forEach(
+            function(k){
+              if(e[k] !== undefined && e[k] !== null){
+                sets.push(k + ' = ' + num(e[k]));
+              }
+            });
+          if(!sets.length){ continue; }
+          out.push('update doctor_food_log set ' + sets.join(', ')
+            + ' where id = ' + lit(e.id) + '::uuid;');
+        }
+        return out.length ? out.join(' ') : null;
+      }
+
+      function deleteSql(ids){
+        var ok = (ids || []).filter(isId);
+        if(!ok.length){ return null; }
+        return 'delete from doctor_food_log where id in ('
+          + ok.map(function(x){ return lit(x) + '::uuid'; }).join(', ') + ');';
+      }
+
+      function itemsToSql(items){
+        var vals = [], i, it;
+        for(i = 0; i < (items || []).length; i++){
+          it = items[i];
+          var name = String(it.item || '').trim();
+          if(!name){ continue; }
+          vals.push('(' + lit(name) + ', ' +
+            lit(String(it.serving || '1 serving').trim()) + ', ' +
+            num(it.calories) + ', ' + num(it.protein_g) + ', ' +
+            num(it.carbs_g) + ', ' + num(it.fat_g) + ', ' +
+            num(it.sugar_g) + ')');
+        }
+        if(!vals.length){ return null; }
+        return 'insert into doctor_nutrition_items '
+          + '(item, serving, calories, protein_g, carbs_g, fat_g, sugar_g)'
+          + ' values ' + vals.join(', ') + ';';
+      }
+
+      function run(sql){
+        return mcp.callTool(SERVER, TOOL, { project_id: PROJECT, query: sql });
+      }
+
+      function library(){
+        return mcp.callTool(SERVER, TOOL, { project_id: PROJECT, query:
+          'select item, serving, calories, protein_g, carbs_g, fat_g, sugar_g '
+          + 'from doctor_nutrition_items order by item limit 300' })
+          .then(function(res){ return rowsFrom(res) || []; },
+                function(){ return []; });
+      }
+
+      /* One call, two jobs: a line is either food to add or a correction to
+         what is already there. Claude is given today's date, the rows on
+         screen with their ids, and the library, and says which it is. */
+      function parse(text, lib){
+        var brief =
+          'You maintain a food diary. Today is ' + todayPT() + ' (Pacific). '
+          + 'The entry below is for: ' + people().join(' and ') + '.\n\n'
+          + 'Decide what the entry is:\n'
+          + '- "log" — food that was eaten and is not yet recorded.\n'
+          + '- "edit" — a correction to rows already recorded (a wrong day, a '
+          + 'wrong amount, a wrong description).\n'
+          + '- "delete" — rows that should not be there at all.\n'
+          + 'One entry may need both a log and an edit; fill in whichever '
+          + 'arrays apply and leave the others empty.\n\n'
+          + 'Dates: work out an explicit YYYY-MM-DD for every dish from '
+          + 'today\'s date above. "yesterday" and "the 11th" are relative to '
+          + 'it. Default to today only when the entry names no day.\n\n'
+          + 'Editing: use only the ids listed under Recorded rows, and only '
+          + 'where the entry clearly refers to that row. Set only the fields '
+          + 'that change — omit a field to leave it as it is. If the entry '
+          + 'says to change it "for both of us", edit the matching row for '
+          + 'each person.\n\n'
+          + 'One row per distinct food, never one summed row per meal. A '
+          + 'burger and fries is two dishes; sausage, egg, toast and a shake '
+          + 'is four. Number the sittings: every food eaten at the same time '
+          + 'shares a "sitting" number, starting at 0, and a food eaten on its '
+          + 'own gets its own number.\n\n'
+          + 'Each dish carries the real totals eaten. Where that was a '
+          + 'fraction or a multiple of one serving, say so in '
+          + '"portion_fraction" (0.5 for half a burger, 2 for two eggs) — the '
+          + 'calories and grams are still the totals actually eaten, not the '
+          + 'per-serving figures. Set "is_estimated" false only when the '
+          + 'numbers were read off a nutrition label.\n\n'
+          + 'Estimating: reuse the library values for anything that matches, '
+          + 'scaled to the quantity eaten, and round to whole grams and whole '
+          + 'calories.\n\n'
+          + 'The library holds atomic, recurring foods only — an egg, a slice '
+          + 'of bread, a protein shake. List under new_items only such foods '
+          + 'that are not in it already. Never add a restaurant or composite '
+          + 'order, not even a consistently named one like a particular '
+          + 'chain\'s drink: a whole order in a table of ingredients is a row '
+          + 'nothing can reuse. Estimate those into the dishes and leave '
+          + 'new_items empty for them.\n\n'
+          + 'Recorded rows:\n'
+          + JSON.stringify(window.__TEFOOD || []) + '\n\n'
+          + 'Library:\n' + JSON.stringify(lib) + '\n\n'
+          + 'Entry:\n' + text + '\n\n'
+          + 'Answer with JSON only, shaped:\n'
+          + '{"action":"log|edit|delete|mixed",'
+          + '"dishes":[{"meal":"","date":"YYYY-MM-DD","sitting":0,'
+          + '"portion_fraction":1,"is_estimated":true,"calories":0,'
+          + '"protein_g":0,"carbs_g":0,"fat_g":0,"sugar_g":0}],'
+          + '"edits":[{"id":"","date":"YYYY-MM-DD"}],'
+          + '"deletes":[""],'
+          + '"new_items":[{"item":"","serving":"","calories":0,"protein_g":0,'
+          + '"carbs_g":0,"fat_g":0,"sugar_g":0}],'
+          + '"summary":"one short sentence saying what you did"}';
+        return sample.json(brief, { modelTier: 'default' });
+      }
+
+      function submit(){
+        if(busy){ return; }
+        var text = textEl.value.trim();
+        if(!text){ say('Type something first.', 'bad'); return; }
+        if(!sample){
+          say('Claude is not reachable from this view, so nothing can be '
+            + 'parsed here. Use a chat with the doctor skill instead.', 'bad');
+          return;
+        }
+        lock(true);
+        say('Reading what is already logged…');
+
+        library().then(function(lib){
+          say('Working it out…');
+          return parse(text, lib);
+        }).then(function(p){
+          p = p || {};
+          var ins = insertSql(p.dishes || []);
+          var upd = editSql(p.edits);
+          var del = deleteSql(p.deletes);
+          if(!ins && !upd && !del){
+            throw { message: 'nothing in that matched food to add or a row to '
+              + 'change' };
+          }
+          say('Saving…');
+
+          /* the corrections first: a re-dated row must not collide with a
+             fresh insert of the same meal */
+          var chain = Promise.resolve();
+          if(del){ chain = chain.then(function(){ return run(del); }); }
+          if(upd){ chain = chain.then(function(){ return run(upd); }); }
+          if(ins){ chain = chain.then(function(){ return run(ins); }); }
+
+          return chain.then(function(){
+            var newSql = itemsToSql(p.new_items);
+            /* the library is a convenience: losing it must not lose the meal */
+            if(newSql){ return run(newSql)['catch'](function(){}); }
+          }).then(function(){
+            var n = (p.dishes || []).length, cal = 0, i;
+            for(i = 0; i < n; i++){ cal += num(p.dishes[i].calories); }
+            textEl.value = '';
+            if(cal){
+              countEl.textContent = Math.round(cal) + ' cal';
+              countEl.hidden = false;
+            }
+            var bits = [];
+            if(ins){
+              bits.push('logged ' + n + (n === 1 ? ' dish' : ' dishes')
+                + ' for ' + people().join(' and '));
+            }
+            if(upd){ bits.push('corrected ' + (p.edits || []).length
+              + ((p.edits || []).length === 1 ? ' row' : ' rows')); }
+            if(del){ bits.push('removed ' + (p.deletes || []).length
+              + ((p.deletes || []).length === 1 ? ' row' : ' rows')); }
+            say(bits.join(', ').replace(/^./, function(c){
+              return c.toUpperCase(); }) + '.', 'good');
+            if(mcp.invalidate){
+              return mcp.invalidate(SERVER, TOOL)
+                .then(loadNutrition, loadNutrition);
+            }
+            loadNutrition();
+          });
+        })['catch'](function(err){
+          var code = err && err.code;
+          if(code === 'not_granted'){
+            say('Parsing needs your permission and it was declined. Reload '
+              + 'the page to be asked again.', 'bad');
+          } else if(code === 'rate_limited'){
+            say('Too many requests just now — try again in a minute.', 'bad');
+          } else {
+            say('Could not do that: '
+              + String((err && err.message) || 'no detail') + '.', 'bad');
+          }
+        }).then(function(){ lock(false); });
+      }
+
+      goEl.addEventListener('click', submit);
+      /* Enter sends, Shift+Enter breaks the line — it is a one-line habit
+         most of the time. */
+      textEl.addEventListener('keydown', function(ev){
+        if(ev.key === 'Enter' && !ev.shiftKey){
+          ev.preventDefault();
+          submit();
+        }
+      });
+
+      claude.use('sample').then(function(s){
+        sample = s || null;
+        if(!sample){
+          say('Claude is not reachable from this view. The table below still '
+            + 'reads normally; log meals in a chat instead.', 'bad');
+          goEl.disabled = true;
+        }
+      }, function(){});
+    })();
+
+    /* ---------------- job tracking ----------------
+       All-time counts. An empty table is zero of everything, not a failure,
+       so the three figures always resolve to numbers once the reply is in. */
+    ask(
+      "select kind as job_kind, count(*)::int as n, " +
+      "to_char(min(min(occurred_at)) over () at time zone " +
+      "'America/Los_Angeles', 'Mon FMDD, YYYY') as since " +
+      "from engine_job_events group by kind",
+      'job_kind',
+      function(rows){
+        var n = { application: 0, rejection: 0, interview: 0 }, since = '';
+        for(var i = 0; i < rows.length; i++){
+          if(n.hasOwnProperty(rows[i].job_kind)){
+            n[rows[i].job_kind] = Number(rows[i].n) || 0;
+          }
+          if(rows[i].since){ since = rows[i].since; }
+        }
+        document.getElementById('jobApps').textContent = n.application;
+        document.getElementById('jobRej').textContent = n.rejection;
+        document.getElementById('jobInt').textContent = n.interview;
+        document.getElementById('jobsSince').textContent =
+          since ? 'since ' + since : 'all time';
+        document.getElementById('jobsNote').hidden = true;
+      },
+      function(why){
+        var note = document.getElementById('jobsNote');
+        note.textContent = 'Counts unavailable: ' + why + '.';
+        note.hidden = false;
+      }
+    );
+
+    /* ---------------- card credits ----------------
+       Every statement credit the issuer has posted this calendar year. The year is
+       the longest cycle a credit runs on; the card works out which cycle each
+       posting belongs to. Read here rather than out of TE because TE rows carry
+       no card, and a credit only means something against the card it sits on. */
+    ask(
+      "select a.name as credit_card, t.date::text as credit_d, " +
+      "t.amount::float8 as credit_amt, t.description as credit_desc " +
+      "from accountant_transactions t " +
+      "join accountant_accounts a on a.id = t.account_id " +
+      "where a.issuer = '<card issuer>' and a.kind = 'credit' " +
+      "and t.amount > 0 and t.description ilike '%credit%' " +
+      "and t.date >= date_trunc('year', " +
+      "(now() at time zone 'America/Los_Angeles'))::date " +
+      "order by t.date",
+      'credit_amt',
+      function(rows){
+        TECRED.setFeed(rows.map(function(r){
+          return { card: r.credit_card, d: r.credit_d,
+                   amt: r.credit_amt, desc: r.credit_desc };
+        }));
+      },
+      function(){}
+    );
+
+    /* ---------------- requires action ----------------
+       Five sources in one query: drafts waiting to send, mail flagged for
+       review, calendar items that named a date but no time, the email sweep
+       when it failed or has not run, and the bank feed's latest run when it
+       errored, loaded nothing, or is overdue. The two sweeps are the safety net
+       for a broken job, which has nowhere else on the page to appear — the
+       2026-09-14 bank feed failure emptied the pending charges for nine hours
+       and showed up nowhere. */
+    ask(
+      "select 'Draft' as tag, coalesce(subject_snippet,'(no subject)') as txt, " +
+      "note as detail, to_char(acted_at at time zone 'America/Los_Angeles'," +
+      "'YYYY-MM-DD') as dt from engine_email_actions " +
+      /* 'drafted', not 'draft' — that is the value the action check
+         constraint allows, and the only one the sweep can write. */
+      "where action = 'drafted' and acted_at >= now() - interval '36 hours' " +
+      "union all " +
+      "select 'Flagged', coalesce(subject_snippet,'(no subject)'), note, " +
+      "to_char(acted_at at time zone 'America/Los_Angeles','YYYY-MM-DD') " +
+      "from engine_email_actions where label = 'Flagged for Review' " +
+      "and acted_at >= now() - interval '36 hours' " +
+      "union all " +
+      "select 'No time', coalesce(title,'(untitled)'), note, " +
+      "to_char(created_at at time zone 'America/Los_Angeles','YYYY-MM-DD') " +
+      "from engine_calendar_intents where status = 'skipped' " +
+      "and created_at >= now() - interval '7 days' " +
+      "union all " +
+      "select 'Sweep', 'Email sweep ' || coalesce(p.status,'?'), " +
+      "coalesce(p.error, 'last started ' || to_char(p.started_at at time zone " +
+      "'America/Los_Angeles','Mon DD, HH12:MI AM')), " +
+      "to_char(now() at time zone 'America/Los_Angeles','YYYY-MM-DD') " +
+      "from (select distinct on (phase) phase, status, started_at, error " +
+      "from engine_phase_runs where phase = 'sweep' " +
+      "order by phase, started_at desc) p " +
+      "where p.status is distinct from 'ok' " +
+      "or p.started_at < now() - interval '30 hours' " +
+      "union all " +
+      "select 'Sweep', 'Email sweep has never run', " +
+      "'No run recorded under phase sweep', " +
+      "to_char(now() at time zone 'America/Los_Angeles','YYYY-MM-DD') " +
+      "where not exists (select 1 from engine_phase_runs where phase = 'sweep') " +
+      "union all " +
+      "select 'Bank', case when b.ran_at < now() - interval '30 hours' " +
+      "then 'Bank feed has not run since ' || to_char(b.ran_at at time zone " +
+      "'America/Los_Angeles','Mon FMDD') " +
+      "when b.rows_inserted + b.rows_skipped = 0 then 'Bank feed loaded nothing' " +
+      "else 'Bank feed reported errors' end, " +
+      "left(case when jsonb_typeof(b.errors) = 'array' then (select " +
+      "string_agg(e, '; ') from jsonb_array_elements_text(b.errors) e) end, 240), " +
+      "to_char(now() at time zone 'America/Los_Angeles','YYYY-MM-DD') " +
+      "from (select ran_at, errors, rows_inserted, rows_skipped " +
+      "from accountant_phase_runs where mode = 'sweep' " +
+      "order by ran_at desc limit 1) b " +
+      "where b.ran_at < now() - interval '30 hours' " +
+      "or b.rows_inserted + b.rows_skipped = 0 " +
+      "or (jsonb_typeof(b.errors) = 'array' and jsonb_array_length(b.errors) > 0)",
+      'tag',
+      function(rows){
+        var seen = {};
+        TEACT.setItems(rows.map(function(r){
+          var slug = String(r.tag + '-' + r.txt).toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
+          var id = slug + '-' + (r.dt || '');
+          if(seen[id]){ id = id + '-' + (seen[id]++); } else { seen[id] = 1; }
+          return { id: id, tag: r.tag, text: r.txt, detail: r.detail || '' };
+        }));
+      },
+      function(){}
+    );
+
+    /* ---------------- edits, written straight to the database ----------------
+       execute_sql takes a query string and offers no parameter binding, so
+       every value is escaped here and the category is checked against the same
+       nine the table's own constraint allows. A transaction id must be digits.
+       Anything failing a check is not written at all. */
+    function lit(v){ return "'" + String(v).replace(/'/g, "''") + "'"; }
+    function catLit(c){
+      if(!c){ return 'null'; }
+      return CATS.indexOf(c) === -1 ? null : lit(c);
+    }
+
+    function sqlFor(d){
+      var name = String(d.name || '').trim();
+      if(!name){ return null; }
+      var cat = catLit(d.cat);
+      if(cat === null){ return null; }
+
+      if(d.scope === 'txn'){
+        if(!/^\d+$/.test(String(d.txn_id || ''))){ return null; }
+        return 'update accountant_transactions set description = ' + lit(name) +
+               ', category = ' + cat + ' where id = ' + String(d.txn_id) + ';';
+      }
+      /* accountant_clean_name() strips digits, * and # before storing, so a
+         raw_pattern holding any of them could never match and would sit there
+         doing nothing. Strip them; with nothing left, skip the alias and still
+         fix the rows already stored. */
+      var pat = String(d.match || '').replace(/[0-9#*]/g, '').trim();
+      var ctes = [];
+      if(pat){
+        ctes.push('a as (insert into accountant_merchant_aliases ' +
+          '(raw_pattern, clean_name) values (' + lit(pat) + ', ' + lit(name) +
+          ') on conflict (raw_pattern) do update set ' +
+          'clean_name = excluded.clean_name returning 1)');
+      }
+      if(d.cat){
+        ctes.push('b as (insert into accountant_merchant_categories ' +
+          '(clean_name, category) values (' + lit(name) + ', ' + cat +
+          ') on conflict (clean_name) do update set ' +
+          'category = excluded.category returning 1)');
+      }
+      return (ctes.length ? 'with ' + ctes.join(', ') + ' ' : '') +
+             'update accountant_transactions set description = ' + lit(name) +
+             ', category = ' + cat + ' where description = ' +
+             lit(String(d.match || '')) + ';';
+    }
+
+    var store = null;
+
+    function commit(id, d){
+      var sql = sqlFor(d);
+      if(!sql){ return; }
+      mcp.callTool(SERVER, TOOL, { project_id: PROJECT, query: sql })
+        .then(function(){
+          /* Order matters. Marking the edit applied removes it from the
+             overlay TE draws on top of the rows, so doing that before the
+             rows are re-read makes a saved rename flick back to the old
+             name — the write succeeded, but nothing had fetched the result.
+             Re-read first, and only drop the overlay once the fresh rows
+             are in. A failed re-read leaves the edit applied:false, so it
+             keeps showing and is retried on the next load. */
+          function done(){
+            if(!store){ return; }
+            store.doc(id).update({ applied: true,
+                                   applied_at: new Date().toISOString() })
+              ['catch'](function(){});
+          }
+          if(mcp.invalidate){
+            mcp.invalidate(SERVER, TOOL)
+              .then(function(){ loadTxns(function(ok){ if(ok){ done(); } }); },
+                    function(){ loadTxns(function(ok){ if(ok){ done(); } }); });
+          } else {
+            loadTxns(function(ok){ if(ok){ done(); } });
+          }
+        })['catch'](function(){ /* stays applied:false, retried next load */ });
+    }
+
+    window.TEWRITE = commit;
+
+    claude.use('db').then(function(db){
+      if(!db){ return; }
+      store = db.collection('txn_edits');
+      /* Anything left unapplied from an earlier visit — a write that failed,
+         or one made while the connector was down — goes now. The page drains
+         its own queue, so no routine has to. */
+      store.get().then(function(snap){
+        for(var i = 0; i < snap.docs.length; i++){
+          var doc = snap.docs[i], d = doc.data() || {};
+          if(d.applied !== true){ commit(doc.id, d); }
+        }
+      })['catch'](function(){});
+    }, function(){});
+  }, function(){});
+})();
+</script>
+
