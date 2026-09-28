@@ -10,7 +10,8 @@ and what still needs a human.
 > real accounts. This copy carries the same page, sweeps, schema and database
 > functions. Every name, key, project id and row of personal data has been
 > taken out, and the page runs on an invented household that is built in the
-> browser. Open `page/index.html` and every card works: taps, renames and
+> browser. **[Open the demo](https://aj-protzel.github.io/tracking-engine-showcase/)**, or open
+> `page/index.html` locally. Every card works: taps, renames and
 > dismissals behave as they do live, and a reload starts over.
 
 ## The rule it is built on
