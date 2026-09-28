@@ -1,0 +1,42 @@
+/* Rentals: the houses the rental sweep found. Temporary, like the page.
+   Loaded by index.html. Styles for other pages are in their own
+   file, so a session working on one page never opens the others. */
+
+#rentFilter{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+#rentFilter[hidden]{display:none}
+ul.rents{list-style:none;margin:0;padding:0}
+ul.rents:empty{display:none}
+.rent{border-top:1px solid var(--line-2)}
+.rent:first-child{border-top:0}
+.rent-row{display:flex;gap:12px;align-items:flex-start;width:100%;padding:12px 0;
+  border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.rent:first-child .rent-row{padding-top:0}
+.rent-pic{flex:none;width:96px;height:72px;border-radius:8px;overflow:hidden;
+  background:var(--sunk);border:1px solid var(--line-2)}
+.rent-pic img{display:block;width:100%;height:100%;object-fit:cover}
+.rent-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.rent-top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.rent-price{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:16px;
+  font-weight:700;font-variant-numeric:tabular-nums;color:var(--ink)}
+.rent-drop{font-size:12px;color:var(--in);text-decoration:line-through}
+.rent-top .tag{margin-top:0}
+.rent-addr{font-size:14px;color:var(--ink-2);overflow-wrap:anywhere}
+.rent.gone .rent-pic,.rent.gone .rent-price{opacity:.5}
+.rent-open{padding:0 0 14px 108px;display:flex;flex-direction:column;gap:10px}
+.rent-agent{margin:0;font-size:13px;color:var(--ink-2);overflow-wrap:anywhere}
+.rent-agent a,.rent-link{color:var(--accent)}
+.rent-link{font-size:14px;font-weight:600}
+.rent-chips{display:flex;flex-wrap:wrap;gap:8px}
+.rent-check{font-size:12px;color:var(--warn)}
+.rent-apply{font-size:12px;color:var(--ink-2)}
+.rent-apply.strict{color:var(--out)}
+.rent-deal{font-size:12px;color:var(--in)}
+.rent-notes{margin:0;font-size:13px;line-height:1.45;color:var(--ink-2)}
+.rent-no{align-self:flex-start;font:inherit;font-size:13px;font-weight:600;cursor:pointer;
+  color:var(--ink-2);background:none;border:1px solid var(--line);border-radius:999px;
+  padding:6px 14px}
+.rent-why{display:flex;flex-direction:column;gap:10px}
+.rent-why input{font:inherit;font-size:16px;color:var(--ink);background:var(--card);
+  border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.rent-why .rent-no{color:var(--on-ink);background:var(--ink);border-color:var(--ink)}
+@media (max-width:420px){ .rent-open{padding-left:0} }

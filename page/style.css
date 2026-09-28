@@ -1,0 +1,109 @@
+/* Shared: tokens, layout, the page strip, cards and the demo note.
+   Anything belonging to a single page lives in that page's stylesheet. */
+
+/* The artifact host supplied this; a plain page has to say it. Every .page and
+   card that sets display would otherwise ignore its hidden attribute. */
+[hidden]{display:none!important}
+
+/* Blue hour into first light: cool slate ground, one sunrise amber for the
+   things he has to act on. Semantic colors stay separate from that accent. */
+:root{
+  --paper:#e9edf2; --card:#ffffff; --sunk:#f2f5f8;
+  --ink:#111924; --ink-2:#445366; --ink-3:#78889b;
+  --line:#d4dce6; --line-2:#e4eaf1;
+  --accent:#9a6410; --accent-soft:#f6ecd8;
+  --in:#2f6b4a; --in-soft:#dcece3;
+  --out:#a03a2c; --out-soft:#f7e3df;
+  --warn:#8f6410; --warn-soft:#f7edd6;
+  --on-ink:#ffffff;
+  --shadow:0 1px 2px rgba(17,25,36,.05),0 10px 28px -20px rgba(17,25,36,.4);
+  --sticky-shadow:0 6px 16px -12px rgba(17,25,36,.5);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0c1218; --card:#141c25; --sunk:#0f1720;
+    --ink:#e7edf5; --ink-2:#a9b8c9; --ink-3:#78889b;
+    --line:#26313d; --line-2:#1c252f;
+    --accent:#e0a94e; --accent-soft:#2c2415;
+    --in:#6fbf90; --in-soft:#17281f;
+    --out:#e08573; --out-soft:#2c1c19;
+    --warn:#dcac4d; --warn-soft:#2a2315;
+    --on-ink:#0c1218;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 28px -20px rgba(0,0,0,.9);
+    --sticky-shadow:0 6px 16px -12px rgba(0,0,0,.9);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0c1218; --card:#141c25; --sunk:#0f1720;
+  --ink:#e7edf5; --ink-2:#a9b8c9; --ink-3:#78889b;
+  --line:#26313d; --line-2:#1c252f;
+  --accent:#e0a94e; --accent-soft:#2c2415;
+  --in:#6fbf90; --in-soft:#17281f;
+  --out:#e08573; --out-soft:#2c1c19;
+  --warn:#dcac4d; --warn-soft:#2a2315;
+  --on-ink:#0c1218;
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 28px -20px rgba(0,0,0,.9);
+  --sticky-shadow:0 6px 16px -12px rgba(0,0,0,.9);
+}
+
+*{box-sizing:border-box}
+/* The page is an app on a phone, not a document: a double tap on a square or a
+   pinch used to zoom it and leave the view shifted. manipulation turns off
+   double-tap zoom; the viewport meta and the gesture handler at the foot of the
+   page stop the pinch. */
+html{touch-action:manipulation;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:680px;margin:0 auto;padding:0 16px 64px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+
+header.top{padding:28px 0 18px}
+h1{font-family:"Bricolage Grotesque","Public Sans",sans-serif;font-weight:800;
+  font-size:clamp(28px,7vw,38px);line-height:1.02;letter-spacing:-.02em;margin:0;
+  text-wrap:balance}
+.date{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px;
+  color:var(--ink-3);letter-spacing:.02em;margin-top:6px}
+
+/* ===== the three pages ===== */
+/* One strip, one page shown at a time. `.tabs`/`.tab` were already taken by
+   the category chips inside the money card, so these carry their own names
+   rather than overloading those. --tabh is the strip's height, and the money
+   card's own sticky header sits below it. */
+:root{--tabh:43px}
+.pagetabs{position:sticky;top:0;z-index:8;display:flex;
+  background:var(--paper);border-bottom:1px solid var(--line);
+  margin:0 -16px 16px;padding:0 16px}
+.ptab{flex:1 1 0;min-width:0;font:inherit;cursor:pointer;
+  font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;
+  font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);background:none;border:none;
+  border-bottom:2px solid transparent;margin-bottom:-1px;
+  padding:14px 4px 12px;white-space:nowrap}
+@media (max-width:380px){.ptab{font-size:10px;letter-spacing:.06em}}
+.ptab:hover{color:var(--ink)}
+.ptab[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+.page{display:flex;flex-direction:column;gap:14px}
+
+main{display:flex;flex-direction:column;gap:14px}
+section.card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+  box-shadow:var(--shadow);overflow:hidden}
+.card-head{display:flex;align-items:center;gap:10px;padding:15px 18px 13px}
+h2{font-family:"Bricolage Grotesque","Public Sans",sans-serif;font-size:16px;
+  font-weight:700;letter-spacing:-.01em;margin:0;flex:1}
+.count{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;
+  font-weight:500;padding:3px 9px;border-radius:999px;background:var(--sunk);
+  color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.count.act{background:var(--accent-soft);color:var(--accent)}
+.card-body{padding:16px 18px}
+.card.plain .card-head{border-bottom:1px solid var(--line-2);padding-bottom:15px}
+
+/* ===== the demo note ===== */
+.demo-note{margin:8px 0 0;padding:9px 12px;border-radius:10px;
+  background:var(--accent-soft);color:var(--accent);font-size:13px;line-height:1.45}
+.errbar{margin:12px 0 0;padding:11px 13px;border-radius:10px;
+  background:var(--out-soft);color:var(--out);font-size:14px;line-height:1.45}
+.signout{display:block;margin:28px auto 0;font:inherit;font-size:13px;
+  font-weight:600;cursor:pointer;color:var(--ink-3);background:none;
+  border:1px solid var(--line);border-radius:999px;padding:8px 18px}
+.signout:hover{color:var(--ink);border-color:var(--ink-3)}

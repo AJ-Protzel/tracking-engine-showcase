@@ -1,0 +1,102 @@
+/* Alerts: requires action, to do, job tracking.
+   Loaded by index.html. Styles for other pages are in their own
+   file, so a session working on one page never opens the others. */
+
+/* ===== the badge ask ===== */
+.badge-ask{display:block;width:100%;margin:0 0 14px;font:inherit;font-size:14px;
+  font-weight:600;cursor:pointer;color:var(--on-ink);background:var(--ink);
+  border:1px solid var(--ink);border-radius:999px;padding:10px 16px}
+.badge-ask[hidden]{display:none}
+
+/* ===== job tracking ===== */
+/* Three running totals, all-time. Counts rather than a list: the threads are
+   in Gmail already, and what the page adds is the tally. */
+.jobs{display:flex;flex-direction:column}
+.job-row{display:flex;justify-content:space-between;align-items:baseline;
+  gap:12px;padding:11px 0}
+.job-row:first-child{padding-top:0}
+.job-row:last-child{padding-bottom:0}
+.job-row+.job-row{border-top:1px solid var(--line-2)}
+.job-name{font-size:15px;font-weight:600;color:var(--ink-2)}
+.job-n{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:20px;
+  font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;
+  color:var(--ink)}
+
+/* ===== requires action ===== */
+/* Items share the to-do rows below; a problem has a red tag and no box. */
+ul.act{list-style:none;margin:0;padding:0}
+ul.act>li{border-top:1px solid var(--line-2)}
+ul.act>li:first-child{border-top:0}
+ul.act>li:first-child>.todo-item,ul.act>li.act-problem:first-child{padding-top:0}
+ul.act .todo-item{border-top:0}
+.act-problem{display:flex;gap:10px;align-items:flex-start;padding:11px 0;
+  font-size:15px;line-height:1.45}
+.act-problem .tag{background:var(--out-soft);color:var(--out)}
+.act-main{flex:1;min-width:0;display:flex;gap:10px;align-items:flex-start}
+.act-body{min-width:0;display:flex;flex-direction:column}
+.todo-item.done .tag{opacity:.5}
+.file-pick{display:flex;align-items:center;gap:8px;padding:0 0 12px 31px}
+.file-lab{font-size:12px;color:var(--ink-3)}
+.file-opt{font:inherit;font-size:12px;font-weight:600;cursor:pointer;
+  padding:4px 12px;border-radius:999px;border:1px solid var(--line);
+  background:none;color:var(--ink-2)}
+.file-opt[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);
+  color:var(--on-ink)}
+/* a charge with no category: its line, then a chip per category */
+.act-uncat{padding:11px 0 0;font-size:15px;line-height:1.45}
+ul.act>li.act-uncat:first-child{padding-top:0}
+.act-uncat .tag{background:var(--out-soft);color:var(--out)}
+/* 16px in the field, or iOS zooms the page when it is focused */
+.uncat-name{display:block;width:100%;box-sizing:border-box;margin-top:10px;
+  font:inherit;font-size:16px;color:var(--ink);background:var(--card);
+  border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.cat-pick{flex-wrap:wrap;padding:10px 0 12px}
+.cat-pick[aria-busy="true"]{opacity:.5;pointer-events:none}
+.all-clear{margin:0;color:var(--ink-3);font-size:14px}
+.tag{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10px;
+  text-transform:uppercase;letter-spacing:.07em;padding:3px 7px;border-radius:5px;
+  flex:none;margin-top:3px;background:var(--warn-soft);color:var(--warn)}
+
+/* ===== settlements ===== */
+ul.sets{list-style:none;margin:0;padding:0}
+ul.sets:empty{display:none}
+.set{padding:12px 0;border-top:1px solid var(--line-2)}
+.set:first-child{border-top:0;padding-top:0}
+.set-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.set-head .tag{margin-top:0}
+.set-title{font-size:15px;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.set-meta{margin:3px 0 0}
+.set-meta .soon{color:var(--warn)}
+.set-ask{margin:8px 0 0;font-size:14px;font-weight:600;color:var(--ink)}
+.set-why{margin:6px 0 0;font-size:13px;line-height:1.45;color:var(--ink-2)}
+.set-acts{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
+.set-go{font-size:14px;font-weight:600;color:var(--accent);margin-right:4px}
+
+/* ===== to do ===== */
+/* 16px in the field, or iOS zooms the page when it is focused */
+.todo-add{display:flex;gap:8px}
+.todo-add input{flex:1;min-width:0;font:inherit;font-size:16px;color:var(--ink);
+  background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:10px 12px}
+.todo-add button{flex:none;font:inherit;font-size:14px;font-weight:600;
+  cursor:pointer;color:var(--on-ink);background:var(--ink);
+  border:1px solid var(--ink);border-radius:999px;padding:0 18px}
+.todo-add button[disabled]{opacity:.5;cursor:default}
+ul.todos{list-style:none;margin:12px 0 0;padding:0}
+ul.todos:empty{display:none}
+.todo-item{display:flex;align-items:flex-start;gap:11px;width:100%;
+  padding:11px 0;border:0;border-top:1px solid var(--line-2);background:none;
+  font:inherit;font-size:15px;line-height:1.45;color:var(--ink);
+  text-align:left;cursor:pointer}
+ul.todos li:first-child .todo-item{border-top:0}
+.todo-box{flex:none;width:20px;height:20px;margin-top:1px;border-radius:6px;
+  border:1.5px solid var(--ink-3);display:flex;align-items:center;
+  justify-content:center;font-size:13px;line-height:1;color:transparent}
+.todo-text{min-width:0;overflow-wrap:anywhere}
+.todo-item.done .todo-box{background:var(--in);border-color:var(--in);
+  color:var(--on-ink)}
+.todo-item.done .todo-text{text-decoration:line-through;color:var(--ink-3)}
+#todoNote{margin-top:10px}
+/* To Do | Backlog */
+.todo-tabs{display:flex;gap:8px;margin-bottom:12px}
+

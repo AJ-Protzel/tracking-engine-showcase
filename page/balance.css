@@ -1,0 +1,260 @@
+/* Balance: money, spend by category, the ledger, the heatmap, credits.
+   Loaded by index.html. Styles for other pages are in their own
+   file, so a session working on one page never opens the others. */
+
+/* ===== money: the sticky control block ===== */
+/* position:sticky dies inside an overflow:hidden ancestor, so this one card
+   opts out of the shared clip. */
+.money-card{overflow:visible}
+.stick{position:sticky;top:var(--tabh);z-index:5;background:var(--card);
+  border-radius:13px 13px 0 0;border-bottom:1px solid var(--line-2);
+  box-shadow:var(--sticky-shadow)}
+
+/* month navigator: one bar the width of the card, arrows at both ends. The
+   middle is a button too - it jumps back to the newest month. */
+.monthnav{display:flex;align-items:stretch;margin:15px 18px 0;overflow:hidden;
+  border:1px solid var(--line);border-radius:10px;background:var(--sunk)}
+.mnav{flex:none;width:46px;padding:9px 0;font:inherit;font-size:18px;
+  line-height:1.2;cursor:pointer;background:none;border:none;color:var(--ink-2)}
+.mnav:hover:not(:disabled){background:var(--card);color:var(--ink)}
+.mnav:disabled{opacity:.28;cursor:default}
+.mnav-mid{flex:1;min-width:0;padding:9px 4px;border:none;background:none;
+  cursor:pointer;color:var(--ink);
+  font-family:"Bricolage Grotesque","Public Sans",sans-serif;
+  font-size:15px;font-weight:700;letter-spacing:-.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mnav-mid:hover{background:var(--card)}
+.figs{display:flex;gap:10px;padding:12px 18px 0}
+.fig{flex:1;min-width:0;border-radius:10px;padding:10px;background:var(--sunk)}
+.fig.in{background:var(--in-soft)}
+.fig.out{background:var(--out-soft)}
+.fig-label{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10px;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3)}
+/* Sized to fit three figures across a phone without wrapping. A wrapped
+   currency value reads as two numbers, which is worse than a small one. */
+.fig-val{font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:clamp(12px,3.9vw,19px);
+  font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums;
+  letter-spacing:-.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fig.in .fig-val{color:var(--in)}
+.fig.out .fig-val{color:var(--out)}
+.fig.net .fig-val{color:var(--ink)}
+
+/* tab strip: scrolls sideways on a phone rather than wrapping to two rows */
+.tabs{display:flex;gap:7px;overflow-x:auto;padding:12px 18px 13px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;font:inherit;font-size:13px;font-weight:600;cursor:pointer;
+  padding:5px 12px;border-radius:999px;border:1px solid var(--line);
+  background:var(--card);color:var(--ink-2);white-space:nowrap}
+.tab:hover{border-color:var(--ink-3)}
+.tab[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);
+  color:var(--on-ink)}
+
+/* ===== spend by category: name, proportional rule, amount ===== */
+.cats{display:flex;flex-direction:column;gap:2px;margin:0 0 4px}
+.cat{display:grid;grid-template-columns:66px 1fr auto;align-items:center;gap:10px;
+  width:100%;font:inherit;text-align:left;cursor:pointer;background:none;
+  border:none;padding:5px 0;border-radius:6px}
+.cat-name{font-size:13px;font-weight:600;color:var(--ink-2)}
+.cat-bar{height:6px;border-radius:3px;background:var(--sunk);overflow:hidden}
+.cat-bar i{display:block;height:100%;background:var(--out);border-radius:3px}
+.cat-amt{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px;
+  font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink-2);
+  white-space:nowrap}
+.money-card.picked .cat{opacity:.4}
+.money-card.picked .cat.on{opacity:1}
+.cat.on .cat-name{color:var(--ink);font-weight:700}
+.cats-head{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);margin:0 0 8px}
+
+/* ===== the transactions, grouped by the day they posted ===== */
+/* Collapsed by default: the figures and the bars are the daily read, the
+   individual rows are the follow-up question. */
+.disclose{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  width:100%;margin-top:16px;padding:11px 13px;border-radius:10px;
+  border:1px solid var(--line);background:var(--sunk);color:var(--ink-2);
+  font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.disclose:hover{border-color:var(--ink-3);color:var(--ink)}
+.chev{flex:none;width:7px;height:7px;margin-top:-3px;
+  border-right:2px solid currentColor;border-bottom:2px solid currentColor;
+  transform:rotate(45deg);transition:transform .2s ease}
+.disclose[aria-expanded="true"] .chev{transform:rotate(-135deg);margin-top:2px}
+@media (prefers-reduced-motion: reduce){.chev{transition:none}}
+.ledger{margin-top:18px;padding-top:14px;border-top:1px solid var(--line-2)}
+.day{margin-top:16px;padding-top:13px;border-top:1px solid var(--line-2)}
+/* filtering can hide the first group, so the leading rule is set in JS
+   rather than with :first-child */
+.day.lead{margin-top:0;padding-top:0;border-top:none}
+.day-label{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);margin:0 0 9px}
+.txns{display:flex;flex-direction:column;gap:10px}
+.txn{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.txn-main{min-width:0}
+.txn-name{font-size:14px;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.txn-name.raw{color:var(--ink-2);font-weight:500}
+.txn-meta{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;
+  color:var(--ink-3);margin-top:2px}
+.txn-amt{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:14px;
+  font-weight:600;color:var(--out);white-space:nowrap;
+  font-variant-numeric:tabular-nums}
+.txn-amt.pos{color:var(--in)}
+.caveat{margin:16px 0 0;color:var(--ink-3);font-size:13px;line-height:1.45}
+.caveat+.caveat{margin-top:6px}
+
+/* ===== spending: four calendar weeks of days, shaded by spend ===== */
+/* Sunday to Saturday, newest week at the bottom. A square is a day's spend in
+   dining, grocery and shopping and shows the day of the month; the column on
+   the right is that week's total. Days still to come in this week are faint
+   outlines, so the grid keeps its shape. */
+.heat{display:grid;grid-template-columns:44px repeat(7,minmax(0,1fr)) 50px;
+  gap:5px;align-items:center}
+.heat-h{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10px;
+  letter-spacing:.06em;color:var(--ink-3);text-align:center}
+.heat-wk{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10px;
+  color:var(--ink-3);white-space:nowrap}
+.heat-wk.now{color:var(--ink);font-weight:700}
+.heat-tot{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;
+  font-weight:600;text-align:right;color:var(--ink-2);white-space:nowrap;
+  font-variant-numeric:tabular-nums}
+/* red as soon as a week passes the caps' total, this week included; green only
+   once a week has ended at or under it, because a week still running can
+   always go over */
+.heat-tot.over{color:var(--out)}
+.heat-tot.under{color:var(--in)}
+.heat-d{display:flex;align-items:center;justify-content:center;width:100%;
+  aspect-ratio:1;border-radius:6px;padding:0;border:none;cursor:pointer;
+  background:var(--sunk);font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+/* A diverging scale around a day's share of the week (about $23): bright green
+   for a day that spent little or nothing, fading to neutral as it nears the
+   share, then red once past it, bright red past twice the share, and a
+   stronger red again past deep_red_over (#budget) — darker on a light page,
+   brighter on a dark one, so it stands out from r2 either way. A recent day
+   with nothing on it yet is left plain rather than green — its charges may
+   simply not have posted. */
+.heat-d.g2{background:var(--in);color:var(--on-ink)}
+.heat-d.g1{background:color-mix(in srgb,var(--in) 45%,var(--sunk))}
+.heat-d.n{background:color-mix(in srgb,var(--ink-3) 35%,var(--sunk))}
+.heat-d.r1{background:color-mix(in srgb,var(--out) 55%,var(--sunk))}
+.heat-d.r2{background:var(--out);color:var(--on-ink)}
+.heat-d.r3{background:var(--heat-r3);color:#fff;font-weight:700}
+:root{--heat-r3:#5e150c}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){--heat-r3:#ff4b33}
+}
+:root[data-theme="dark"]{--heat-r3:#ff4b33}
+.heat-d.future{background:none;box-shadow:inset 0 0 0 1px var(--line-2);
+  color:var(--line);cursor:default}
+.heat-d.today{box-shadow:inset 0 0 0 1.5px var(--ink-3)}
+.heat-d[aria-pressed="true"]{box-shadow:0 0 0 2px var(--accent)}
+.heat-legend{display:flex;align-items:center;justify-content:flex-end;gap:4px;
+  margin-top:10px;font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:10px;color:var(--ink-3)}
+.heat-legend i{display:block;width:12px;height:12px;border-radius:3px;
+  aspect-ratio:auto}
+.heat-legend span{margin:0 4px}
+.heat-detail{margin:14px 0 0;padding:11px 13px;border-radius:10px;
+  background:var(--sunk);font-size:14px;line-height:1.45;color:var(--ink-2)}
+.heat-detail b{color:var(--ink)}
+.heat-detail .cats-line{display:block;margin-top:3px;
+  font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;
+  color:var(--ink-3)}
+.heat-detail .late{display:block;margin-top:4px;font-size:12px;color:var(--warn)}
+/* the charges behind the day, under its category split */
+.day-txns{list-style:none;margin:10px 0 0;padding:8px 0 0;
+  border-top:1px solid var(--line-2);display:flex;flex-direction:column;gap:7px}
+.day-txn{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.day-txn-name{min-width:0;font-size:13px;color:var(--ink);overflow-wrap:anywhere}
+.day-txn-meta{display:block;font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:11px;color:var(--ink-3)}
+.day-txn-amt{flex:none;font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:13px;font-weight:600;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.day-txn.out .day-txn-name,.day-txn.out .day-txn-amt{color:var(--ink-3)}
+.day-txn.out .day-txn-amt{text-decoration:line-through}
+
+/* ===== renaming and categorizing a row, from the page ===== */
+/* A tapped row opens under itself. The edit is stored against the merchant,
+   not the charge, so tomorrow's charge from the same place lands named. */
+.txn-row{display:flex;flex-direction:column}
+.txn{width:100%;font:inherit;text-align:left;background:none;border:none;
+  padding:0;color:inherit}
+.ledger.editable button.txn{cursor:pointer}
+.ledger.editable button.txn:hover .txn-name{color:var(--accent)}
+.txn.open .txn-name{color:var(--accent)}
+/* A charge the bank has not settled. It counts in every total — the money is
+   spent — so the marker goes on the row rather than into `category`, which the
+   spend bars read, or into the name, which the merchant alias map matches on. */
+.prov{color:var(--warn);font-weight:700}
+.ed-hint{margin:0 0 14px;color:var(--ink-3);font-size:12px}
+.txn-edit{margin:11px 0 3px;padding:13px;border:1px solid var(--line);
+  border-radius:10px;background:var(--sunk)}
+.ed-lab{display:block;font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:10px;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--ink-3);margin:0 0 6px}
+.ed-block{margin-top:12px}
+.ed-name{width:100%;font:inherit;font-size:16px;font-weight:600;
+  color:var(--ink);background:var(--card);border:1px solid var(--line);
+  border-radius:8px;padding:9px 10px}
+.ed-chips{display:flex;flex-wrap:wrap;gap:6px}
+.ed-chip{font:inherit;font-size:12px;font-weight:600;cursor:pointer;
+  padding:5px 11px;border-radius:999px;border:1px solid var(--line);
+  background:var(--card);color:var(--ink-2)}
+.ed-chip:hover{border-color:var(--ink-3)}
+.ed-chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);
+  color:var(--on-ink)}
+.ed-acts{display:flex;align-items:center;gap:8px;margin-top:14px}
+.ed-btn{font:inherit;font-size:13px;font-weight:600;cursor:pointer;
+  padding:8px 15px;border-radius:9px;border:1px solid var(--line);
+  background:var(--card);color:var(--ink-2)}
+.ed-btn:hover{border-color:var(--ink-3);color:var(--ink)}
+.ed-btn.go{background:var(--ink);border-color:var(--ink);color:var(--on-ink)}
+.ed-note{margin:11px 0 0;color:var(--ink-3);font-size:12px;line-height:1.45}
+
+/* ===== card credits ===== */
+/* Struck through rather than removed: these refresh on their own cycle,
+   so a used credit is a state, not a deletion. */
+/* The whole list, at full height. It used to sit in a 392px window that
+   cut the last row to say there was more below; with the same credit split
+   across two cards, the thing worth seeing was the split, not the cut. */
+
+/* A flat list, soonest deadline first. Credits that sit on two cards were
+   once folded under one expandable row; the fold hid the deadline,
+   which is the only thing that makes one of them urgent. Each card's credit
+   is its own line now, and the sub-line carries the card and the days left. */
+#credsBody>*+*{border-top:1px solid var(--line-2)}
+.cred-meta .soon{color:var(--warn);font-weight:700}
+.creds{display:flex;flex-direction:column}
+.cred{display:block;width:100%;padding:13px 0}
+.cred+.cred{border-top:1px solid var(--line-2)}
+.cred-top{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.cred-title{display:flex;align-items:center;gap:9px;min-width:0}
+/* The merchant's own icon, served from page/icons beside this file rather than
+   from a favicon service, which would hand the credit list to a third party on
+   every load. It is decoration: a missing one hides itself and the row reads
+   the same. */
+.cred-icon{flex:none;width:22px;height:22px;border-radius:6px;object-fit:contain;
+  background:var(--sunk)}
+.cred-name{font-size:14px;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.cred-meta{display:block;font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:11px;color:var(--ink-3);margin-top:2px;white-space:normal}
+.cred-amt{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:14px;
+  font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;
+  white-space:nowrap}
+/* the bar is the state: it fills as the credit is claimed, and a full bar
+   strikes the row through. Nothing leaves the list — these come back. */
+.cred-track{display:block;height:7px;border-radius:4px;background:var(--sunk);
+  overflow:hidden;margin-top:10px}
+.cred-track i{display:block;height:100%;width:0;background:var(--in);
+  border-radius:4px;transition:width .25s ease}
+.cred-legend{display:flex;justify-content:space-between;gap:10px;margin-top:6px;
+  font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;
+  color:var(--ink-3);font-variant-numeric:tabular-nums}
+.cl-r.soon{color:var(--warn);font-weight:700}
+.cred.used .cred-name,
+.cred.used .cred-amt{text-decoration:line-through;
+  text-decoration-thickness:1.5px;color:var(--ink-3)}
+.cred.used .cred-icon{opacity:.45}
+.cred.used .cl-r{color:var(--in);font-weight:700}
+@media (prefers-reduced-motion: reduce){.cred-track i{transition:none}}
+

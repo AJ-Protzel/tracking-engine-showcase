@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Tracking Engine</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tracking">
+<meta name="theme-color" content="#e9edf2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0c1218" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="alerts.css">
+<link rel="stylesheet" href="food.css">
+<link rel="stylesheet" href="balance.css">
+<link rel="stylesheet" href="rentals.css">
+
+</head>
+<body>
+
+<div class="wrap" id="app">
+
+<header class="top">
+  <div class="date" id="briefDate">&nbsp;</div>
+  <p class="demo-note">Demo &middot; sample data, nothing real. Taps and edits work and reset on reload.</p>
+  <div class="errbar" id="err" hidden></div>
+</header>
+
+<nav class="pagetabs" role="tablist" aria-label="Pages">
+  <button class="ptab" role="tab" data-page="alerts" aria-selected="true">Alerts</button>
+  <button class="ptab" role="tab" data-page="food" aria-selected="false">Food</button>
+  <button class="ptab" role="tab" data-page="balance" aria-selected="false">Balance</button>
+  <button class="ptab" role="tab" data-page="rentals" aria-selected="false">Rentals</button>
+</nav>
+
+<main>
+
+  <div class="page" data-page="alerts">
+  <!-- Shown only in the home-screen app, and only until notifications are
+       allowed or refused: iOS draws the icon badge only with that permission. -->
+  <button type="button" class="badge-ask" id="badgeAsk" hidden>Show the count on the home-screen icon</button>
+
+  <!-- ============ REQUIRES ACTION ============ -->
+  <section class="card plain">
+    <div class="card-head">
+      <h2>Requires Action</h2>
+      <span class="count act" id="actCount">0</span>
+    </div>
+    <div class="card-body">
+      <ul class="act" id="actList">
+      </ul>
+      <p class="all-clear" id="allClear" hidden>Nothing outstanding — everything
+        raised this morning has been dealt with.</p>
+    </div>
+  </section>
+
+  <!-- ============ TO DO ============ -->
+  <!-- secretary_todos, list = 'todo', with list = 'backlog' behind a second
+       tab: to-dos he has parked, never counted in the badge. A tap crosses an
+       item off, or back on; one still crossed off when the next 1am sweep
+       runs is cleared. -->
+  <section class="card plain" id="todoCard">
+    <div class="card-head">
+      <h2>To Do</h2>
+      <span class="count" id="todoCount">0</span>
+    </div>
+    <div class="card-body">
+      <div class="todo-tabs" id="todoTabs" hidden>
+        <button type="button" class="file-opt" id="tabTodo" aria-pressed="true">To Do</button>
+        <button type="button" class="file-opt" id="tabBack" aria-pressed="false">Backlog</button>
+      </div>
+      <div id="todoPane">
+        <form class="todo-add" id="todoForm">
+          <input id="todoInput" type="text" maxlength="200" placeholder="Add a to-do"
+            autocomplete="off" enterkeyhint="done" aria-label="New to-do">
+          <button type="submit">Add</button>
+        </form>
+        <ul class="todos" id="todoList"></ul>
+      </div>
+      <ul class="todos" id="backList" hidden></ul>
+      <p class="caveat" id="todoNote" hidden>Crossed-off items clear at the next sweep.</p>
+    </div>
+  </section>
+
+  <!-- ============ SETTLEMENTS ============ -->
+  <!-- accountant_settlements: class actions he likely qualifies for, found by
+       the email sweep (notices every night, a site search on Sundays). Only
+       what he can still act on shows: a question, one to file, one filed and
+       waiting to pay. Claims are filed by hand, never by the sweep. -->
+  <section class="card plain" id="setCard">
+    <div class="card-head">
+      <h2>Settlements</h2>
+      <span class="count" id="setCount">0</span>
+    </div>
+    <div class="card-body">
+      <ul class="sets" id="setList"></ul>
+      <p class="blank" id="setEmpty">Nothing to claim right now.</p>
+    </div>
+  </section>
+
+  <!-- ============ JOB TRACKING ============ -->
+  <!-- Counted from secretary_job_events, which the 1am sweep fills from job mail.
+       All-time on purpose: the tally runs until the search ends. -->
+  <section class="card plain" id="jobsCard">
+    <div class="card-head">
+      <h2>Job Tracking</h2>
+    </div>
+    <div class="card-body">
+      <div class="jobs">
+        <div class="job-row"><span class="job-name">Applications</span><span class="job-n" id="jobApps">&mdash;</span></div>
+        <div class="job-row"><span class="job-name">Rejections</span><span class="job-n" id="jobRej">&mdash;</span></div>
+        <div class="job-row"><span class="job-name">Interviews</span><span class="job-n" id="jobInt">&mdash;</span></div>
+      </div>
+    </div>
+  </section>
+
+  </div>
+
+  <div class="page" data-page="food" hidden>
+  <!-- ============ INTAKE ============ -->
+  <!-- Fourteen days of calories per person, each bar split by where those
+       calories came from. There is no target line and there should not be one
+       (2026-09-14): the only reference is each person's own average. -->
+  <section class="card plain" id="intakeCard">
+    <div class="card-head">
+      <h2>Intake</h2>
+      <span class="count" id="intakeCount">14 days</span>
+    </div>
+    <div class="card-body">
+      <div id="intakeBody"><p class="blank">Loading&hellip;</p></div>
+    </div>
+  </section>
+
+  <!-- ============ DOCTOR'S RECOMMENDATION ============ -->
+  <!-- Written by the doctor skill in a chat, on request. Nothing writes it on
+       a schedule: a recommendation nobody asked for is a cost with no reader.
+       Only the newest per person shows; each stands until that person's next. -->
+  <section class="card plain" id="recCard">
+    <div class="card-head">
+      <h2>Doctor's Recommendation</h2>
+    </div>
+    <div class="card-body">
+      <div id="recBody"><p class="blank">Loading&hellip;</p></div>
+    </div>
+  </section>
+  </div>
+
+  <div class="page" data-page="balance" hidden>
+  <!-- ============ SPENDING ============ -->
+  <!-- leave_out_over drops any single charge above that size from the squares
+       and totals: a new sofa or a plane ticket is not a treat. always_count
+       names merchants exempt from it, matched anywhere in the description,
+       because a big Costco run is still groceries. A charge left out still
+       shows when its day is tapped.
+
+       Four calendar weeks of days. Only dining, grocery and shopping count, and
+       the three caps below are what set the shading: a day's even share of
+       their weekly total is the middle shade. They are benchmarks — what a
+       household like this one is reckoned to need — and how each figure was
+       built is in the README. deep_red_over is a flat line on top of that: a
+       day past it gets the strongest red, whatever the caps say. -->
+  <script type="application/json" id="budget">
+  {"caps": {"dining": 25, "grocery": 110, "shopping": 25}, "weeks": 4,
+   "leave_out_over": 99, "always_count": ["costco"],
+   "deep_red_over": 100}
+  </script>
+
+  <section class="card plain budget-card" id="budgetCard">
+    <div class="card-head">
+      <h2>Spending</h2>
+    </div>
+    <div class="card-body">
+      <div class="heat" id="budHeat" role="group" aria-label="Spend by day"></div>
+      <div class="heat-legend" id="budLegend"></div>
+      <div class="heat-detail" id="budDetail">Tap a day to see what was spent.</div>
+    </div>
+  </section>
+  <!-- ============ MONEY + TRANSACTIONS (merged) ============ -->
+  <section class="card money-card" id="moneyCard">
+
+    <div class="stick">
+      <div class="monthnav">
+        <button class="mnav" id="mPrev" type="button" aria-label="Earlier month">&lsaquo;</button>
+        <button class="mnav-mid" id="monthLabel" type="button" aria-label="Jump to the latest month">September 2026</button>
+        <button class="mnav" id="mNext" type="button" aria-label="Later month">&rsaquo;</button>
+      </div>
+      <div class="figs">
+        <div class="fig in">
+          <div class="fig-label">In</div>
+          <div class="fig-val" id="figIn">$0.00</div>
+        </div>
+        <div class="fig out">
+          <div class="fig-label">Out</div>
+          <div class="fig-val" id="figOut">$0.00</div>
+        </div>
+        <div class="fig net">
+          <div class="fig-label">Net</div>
+          <div class="fig-val" id="figNet">$0.00</div>
+        </div>
+      </div>
+      <div class="tabs" id="tabs" role="group" aria-label="Filter by category"></div>
+    </div>
+
+    <div class="card-body">
+
+      <p class="cats-head">Spend by category</p>
+      <div class="cats" id="cats"></div>
+
+      <button class="disclose" id="ledgerToggle" aria-expanded="false" aria-controls="ledger">
+        <span id="ledgerLabel">Show transactions</span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <div class="ledger" id="ledger" hidden></div>
+
+      <p class="caveat" id="gapNote" hidden></p>
+      <p class="caveat" id="syncedLine">Synced</p>
+    </div>
+  </section>
+  <!-- ============ CARD CREDITS ============ -->
+  <section class="card plain credits-card" id="creditsCard">
+    <div class="card-head">
+      <h2>Credits</h2>
+      <span class="count" id="creditsOpen">&nbsp;</span>
+    </div>
+    <div class="card-body">
+      <div class="creds" id="credsBody">
+      </div>
+    </div>
+  </section>
+  </div>
+
+  <div class="page" data-page="rentals" hidden>
+  <!-- ============ RENTALS ============ -->
+  <!-- Temporary: houses the daily rental sweep found, until a place is found.
+       Then this page, its two files, its tables and its sweep all go. -->
+  <section class="card plain" id="rentCard">
+    <div class="card-head">
+      <h2>Rentals</h2>
+      <span class="count" id="rentCount">0</span>
+    </div>
+    <div class="card-body">
+      <div id="rentFilter" hidden></div>
+      <ul class="rents" id="rentList"></ul>
+      <p class="blank" id="rentEmpty">Nothing has passed vetting yet.</p>
+    </div>
+  </section>
+  </div>
+
+</main>
+<button class="signout" id="signout" type="button">Reset the demo</button>
+</div>
+
+<script src="demo-data.js"></script>
+<script src="data.js"></script>
+<script src="alerts.js"></script>
+<script src="food.js"></script>
+<script src="balance.js"></script>
+<script src="rentals.js"></script>
+</body>
+</html>

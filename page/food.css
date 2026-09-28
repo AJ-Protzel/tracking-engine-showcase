@@ -1,0 +1,61 @@
+/* Food: the intake chart, a tapped day's meals, the recommendation.
+   Loaded by index.html. Styles for other pages are in their own
+   file, so a session working on one page never opens the others. */
+
+/* ===== intake: a day's foods, under the chart ===== */
+.meal{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  padding:7px 0;border-top:1px solid var(--line-2)}
+.meal:first-child{border-top:none}
+.meal-name{font-size:13px;color:var(--ink-2);line-height:1.4;
+  overflow-wrap:anywhere}
+.meal-num{flex:none;font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums;
+  white-space:nowrap}
+.who{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-2);
+  margin:0 0 6px}
+.blank{color:var(--ink-3);white-space:normal}
+
+/* ===== doctor's recommendation ===== */
+.rec{padding:13px 0;border-top:1px solid var(--line-2)}
+.rec:first-child{border-top:none;padding-top:0}
+.rec:last-child{padding-bottom:0}
+.rec-head{display:flex;justify-content:space-between;align-items:baseline;
+  gap:10px;margin:0 0 5px}
+.rec-body{margin:0;font-size:14px;line-height:1.5;color:var(--ink-2);
+  white-space:pre-wrap}
+
+/* ===== intake: 14 days of calories, split by macro ===== */
+/* Bars are scaled together across both people, so the two rows compare. A day
+   with three or fewer foods on it is drawn hollow — that is a day nobody
+   finished logging, not a day nobody ate. */
+.intake-who{display:flex;justify-content:space-between;align-items:baseline;
+  gap:10px;margin:0 0 2px}
+.intake-who+.chart{margin-bottom:18px}
+.chart-avg-lab{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;
+  color:var(--ink-3);font-variant-numeric:tabular-nums}
+.chart{position:relative;margin:0 0 4px}
+.chart-bars{display:flex;align-items:flex-end;gap:3px;height:104px}
+.chart-col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;
+  height:100%;padding:0;border:0;background:none;cursor:pointer}
+.chart-stack{display:flex;flex-direction:column;justify-content:flex-end;
+  border-radius:3px 3px 0 0;overflow:hidden;min-height:1px}
+.chart-seg{width:100%}
+.seg-f{background:var(--warn)}
+.seg-c{background:color-mix(in srgb,var(--ink-3) 50%,var(--sunk))}
+.seg-p{background:var(--in)}
+.chart-col.thin .chart-stack{opacity:.45}
+.chart-col.on .chart-stack{outline:2px solid var(--ink-2);outline-offset:1px}
+.chart-avg{position:absolute;left:0;right:0;border-top:1px dashed var(--ink-3);
+  opacity:.65;pointer-events:none}
+.chart-days{display:flex;gap:3px;margin-top:5px}
+.chart-days span{flex:1;text-align:center;font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:9px;color:var(--ink-3)}
+.chart-key{display:flex;flex-wrap:wrap;gap:4px 14px;margin:2px 0 0;
+  font-size:11px;color:var(--ink-3)}
+.chart-key i{display:inline-block;width:9px;height:9px;border-radius:2px;
+  margin-right:5px;vertical-align:baseline}
+.intake-detail{margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line-2);
+  font-size:13px;color:var(--ink-2);line-height:1.5}
+.intake-detail .blank{margin:0}
+
