@@ -1,6 +1,6 @@
 # Settlements
 
-Read by the 1:00am email sweep (`sweeps/email-sweep.md`): the **Notices** part
+Read by the 3:00am email sweep (`sweeps/email-sweep.md`): the **Notices** part
 every night, the **Search** part on Sundays only. It is not a routine of its
 own: folding it into the one routine that already runs costs one session boot
 instead of two. Edit here, commit, push; the next run reads it.
@@ -49,7 +49,7 @@ in, employers, insurers, devices, services (phone carriers, internet providers,
 online and financial accounts) and schools. `owned = false` means sold, left
 or attended — still evidence for a settlement about a past purchase, tenancy,
 job, account or data breach. He adds to it by answering an `ask` row with "I
-have it" on the page. A row whose `notes` start `Sam's` is his partner's: a
+have it" on the page. A row whose `notes` start `Sam's` is his wife's: a
 settlement for it is hers to file, so its `evidence` says so.
 
 ## Notices — every night
@@ -86,20 +86,32 @@ four serve real listings to an automated fetch.
 - https://www.openclassactions.com/settlements.php
 
 Consumer Action blocks automated fetches and ClassActionRebates lists only
-expired ones; do not use either. If a source fails twice, move on and name it
-in `failures`.
+expired ones; do not use either.
+
+**Fetch with the `WebFetch` tool, never `curl` or anything else in Bash.** The
+cloud run's sandbox proxy blocks all four sites from Bash, which is how the
+2026-09-27 Sunday found nothing. If `WebFetch` is refused for a source too, use
+`WebSearch` (`open class action settlement claim deadline`) for that week's
+listings instead, and follow its results to each settlement's own site. A
+source that still cannot be read is not a failure as long as at least one other
+source was read: skip it and say nothing (on 2026-10-11 two sources gave a DNS
+error, the other two worked, and listing it raised a false alarm). Only when no
+source and no `WebSearch` could be read at all does the search go in
+`failures`, as one line: `Settlement search could not reach any source this
+Sunday`.
 
 **For each open settlement not already in the table**, decide in this order:
 
 1. **Skip it** if its deadline is less than 2 days away, it has no claim form
-   link, or the class plainly excludes him (a state he never lived in;
-   a business-only class).
+   link, or the class plainly excludes him (a state he never lived in — the asset list says where
+   he has lived; a business-only class).
 2. **`new`** if there is written evidence he qualifies. Look, cheapest first:
    - `accountant_assets` — the product, vehicle, landlord, employer or insurer
      it names;
    - `accountant_transactions` — a charge or refund from the company inside
      the class period (`description ilike '%<name>%'`, dates between the
-     class period's ends);
+     class period's ends). History has a gap from 2025-03-12 to 2026-03-19; a
+     class period inside the gap proves nothing either way;
    - `accountant_accounts` — the bank or card a breach or fee settlement names;
    - Gmail — `from:<company domain>` for proof he had an account, or a breach
      notice from them.

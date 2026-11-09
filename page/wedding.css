@@ -1,0 +1,6 @@
+/* The Wedding page: the wedding sheet straight from its own public site in a frame,
+   with the app's own strip above it. The frame fills the window under the strips and scrolls
+   itself (wedding.js sets its height). Costs and Shopping are styled in
+   wedding-tabs.css. */
+#wed .sheet{display:block;width:100%;height:600px;border:0;background:#e9e2da}
+#wed .subnav{top:52px;z-index:7;margin:-16px -16px 0}

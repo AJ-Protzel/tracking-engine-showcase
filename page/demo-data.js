@@ -139,50 +139,7 @@ window.TEDEMO = function(){
   }
   nutrition.sort(function(a, b){ return a.d < b.d ? 1 : a.d > b.d ? -1 : 0; });
 
-  /* ---- rentals ---- */
-  var H = [
-    // address, price, was, beds, baths, sqft, days, verdict, why, landlord, income, apply, notes
-    ['118 Juniper Ct', 1895, null, 3, 2, 1340, 2, 'pass', null, 'private', 'flexible',
-     'Open to a co-signer or extra deposit',
-     'Single-level house, in-unit washer and dryer, central AC, fenced yard. Owner-managed.'],
-    ['2207 Maple Ave', 2150, 2295, 3, 2, 1520, 34, 'pass', null, 'manager', 'none_stated', null,
-     'Detached home near the park. Laundry room with hookups, mini-split AC in every room.'],
-    ['64 Heron Way', 1750, null, 2, 1, 980, 1, 'pass', null, 'private', 'none_stated', null,
-     'Cottage on its own lot. Stacked washer/dryer, window AC units included.'],
-    ['915 Birch St', 2050, null, 3, 2.5, 1610, 9, 'pass', null, 'complex', 'strict',
-     'Income 3x rent, verified', 'Townhome end unit, attached garage, W/D in unit, central air.'],
-    ['412 Alder St Apt 1', 1725, null, 2, 1, 900, 5, 'unsure', 'AC not mentioned', 'complex',
-     'strict', 'Income 2.5x rent', 'Fourplex unit with shared yard. In-unit laundry; cooling not listed.'],
-    ['412 Alder St Apt 3', 1799, null, 2, 1, 920, 5, 'unsure', 'AC not mentioned', 'complex',
-     'strict', 'Income 2.5x rent', 'Fourplex unit with shared yard. In-unit laundry; cooling not listed.'],
-    ['412 Alder St Apt 4', 1850, null, 2, 1.5, 960, 12, 'unsure', 'AC not mentioned', 'complex',
-     'strict', 'Income 2.5x rent', 'Fourplex unit with shared yard. In-unit laundry; cooling not listed.'],
-    ['37 Willow Bend', 1990, null, 3, 2, 1280, 21, 'unsure', 'Hookups only', 'private',
-     'flexible', 'Prepaid rent considered', 'Ranch house, washer/dryer hookups in garage, central AC.'],
-    ['1502 Cedar Loop', 2275, null, 4, 2, 1890, 45, 'unsure', 'Whole home not confirmed',
-     'manager', 'none_stated', null, 'Listing mentions a converted garage suite; may be let separately.'],
-    ['780 Poplar Dr', 1650, null, 2, 1, 850, 3, 'unsure', 'Laundry not mentioned', 'unknown',
-     'none_stated', null, 'Duplex half with a small yard. AC listed; no mention of laundry.'],
-    ['23 Orchard Ln', 2100, null, 3, 2, 1450, 16, 'pass', null, 'private', 'none_stated', null,
-     'Updated kitchen, in-unit laundry, central AC, two-car driveway.'],
-    ['309 Sparrow Rd', 1925, null, 3, 1.5, 1210, 60, 'pass', null, 'manager', 'strict',
-     'Income 3x rent', 'Split-level house, laundry closet with W/D, heat pump with AC.']
-  ];
-  var rentals = H.map(function(h, i){
-    var bld = h[0].replace(/ Apt \d+$/, '').toLowerCase().replace(/[^a-z0-9]/g, '') + '-00000';
-    return { id: 500 + i, address: h[0], city: 'Riverbend', price: h[1], price_was: h[2],
-             beds: h[3], baths: h[4], sqft: h[5], days: h[6], photo: null,
-             url: 'https://example.com/listing/' + (500 + i), status: 'new', gone: false,
-             agent_name: i % 3 ? 'Jordan Lee' : 'Casey Moreno',
-             agent_phone: '(555) 010-' + (1200 + i), agent_email: 'leasing' + i + '@example.com',
-             notes: h[12], verdict: h[7], verdict_reason: h[8], building: bld,
-             landlord: h[9], income_rule: h[10], apply_note: h[11] };
-  });
-  rentals[0].status = 'interested';
-  rentals[10].status = 'contacted';
-  rentals[10].gone = true;
-
-  return {
+  var out = {
     next_id: 9000,
     transactions: txns,
     accounts: accounts,
@@ -221,8 +178,6 @@ window.TEDEMO = function(){
     ],
     credit_postings: credit_postings,
     credits: credits,
-    rentals: rentals,
-    rental_statuses: ['new', 'interested', 'contacted'],
     settlements: [
       { id: 21, title: 'Northwind Telecom data breach', url: 'https://example.com/claims/northwind',
         deadline: iso(ago(-9)), payout: 'up to $2,500', proof: false,
@@ -242,8 +197,96 @@ window.TEDEMO = function(){
       { tag: 'Sweep', txt: 'Email sweep finished with problems',
         detail: 'Save/Jobs search timed out twice; it runs again tonight' },
       { tag: 'Settlement', txt: 'Northwind Telecom data breach — claim closes in 9 days',
-        detail: 'up to $2,500 · File it from the Settlements card.' },
-      { tag: 'Rentals', txt: '3 new rentals in Filtered today', detail: 'Open the Rentals tab.' }
+        detail: 'up to $2,500 · File it from the Settlements card.' }
     ]
   };
+  return window.TEDEMOMORE(out, ago, iso, label);
+};
+
+/* ==========================================================================
+   The rest of the invented household: what the newer pages read.
+   Net worth (page_monarch_data), mail highlights (page_highlights), the
+   wedding's costs (page_wedding_data) and its shopping ticks (page_shop_get),
+   plus the settings, usage and push key page_data() now carries.
+   ========================================================================== */
+window.TEDEMOMORE = function(out, ago, iso, label){
+  out.settings = out.settings || {};
+  out.usage = { cloudflare: { limit: 500, used: 64 }, db_bytes: 31e6, db_limit: 500e6 };
+  out.push_key = null;
+  out.next_id = out.next_id || 900;
+
+  /* net worth: five accounts, a year of daily balances that drift upward */
+  var ACCTS = [
+    ['a1', 'Checking', 'Northwind Bank', 6400, 3200],
+    ['a2', 'Savings', 'Northwind Bank', 18200, 9000],
+    ['a3', 'Brokerage', 'Contoso Invest', 24500, 15000],
+    ['a4', 'Gold', 'Card', -1350, -900],
+    ['a5', 'Everyday Visa', 'Card', -420, -300]
+  ];
+  var balances = [];
+  for (var k = 365; k >= 0; k--) {
+    var d = iso(ago(k));
+    ACCTS.forEach(function(a, n){
+      var drift = a[3] - (a[3] - a[4]) * (k / 365);
+      var wobble = Math.sin((k + n * 11) / 9) * Math.abs(a[3]) * 0.03;
+      balances.push({ acct: a[0], d: d, bal: Math.round((drift + wobble) * 100) / 100 });
+    });
+  }
+  out.monarch = {
+    accounts: ACCTS.map(function(a){
+      return { id: a[0], name: a[1], kind: a[3] < 0 ? 'credit' : 'bank', owner: 'household',
+               bank: a[2], last4: null, balance: a[3], as_of: new Date().toISOString() };
+    }),
+    balances: balances
+  };
+
+  out.highlights = [
+    { sender: 'school@example.com', n: 2, note: 'Field trip form due Friday',
+      at: ago(0).toISOString(), thread: 'demo-1' },
+    { sender: 'pharmacy@example.com', n: 1, note: 'Prescription ready for pickup',
+      at: ago(1).toISOString(), thread: 'demo-2' }
+  ];
+
+  /* the wedding: Maya and Sam, the same invented couple as the wedding-tracker demo */
+  var groups = [
+    { id: 1, name: 'Fernbrook Lodge venue' }, { id: 2, name: 'Photography' },
+    { id: 3, name: 'Catering' }, { id: 4, name: 'Florist' }, { id: 5, name: 'Attire' },
+    { id: 20, name: 'Gifts' }
+  ];
+  function row(id, g, label_, amt, status, daysAgo, extra){
+    var r = { id: id, group_id: g, label: label_, amount: amt, status: status,
+              date_label: label(ago(daysAgo)), due_date: status === 'due' ? iso(ago(daysAgo)) : null,
+              details: null, in_bank: status !== 'due', part_num: null, part_total: null,
+              refundable: false, currency: 'USD', gift_via: null, gift_side: null };
+    for (var x in (extra || {})) { r[x] = extra[x]; }
+    return r;
+  }
+  var tx = [
+    row(1, 1, 'Venue deposit', 2500, 'paid', 120, { part_num: 1, part_total: 2 }),
+    row(2, 1, 'Venue balance', 2500, 'due', -20, { part_num: 2, part_total: 2 }),
+    row(3, 1, 'Damage deposit', 800, 'paid', 60, { refundable: true }),
+    row(4, 2, 'Photographer retainer', 900, 'paid', 95),
+    row(5, 2, 'Photographer balance', 1800, 'due', -6),
+    row(6, 3, 'Catering deposit', 1200, 'paid', 70),
+    row(7, 3, 'Catering final count', 2650, 'due', 3),
+    row(8, 4, 'Florist', 640, 'paid', 30),
+    row(9, 5, 'Dress alterations', 280, 'paid', 14),
+    row(10, 20, 'Gift from Grandma June', 1500, 'received', 40, { gift_via: 'check', gift_side: 'bride' }),
+    row(11, 20, 'Gift from the Parks', 300, 'received', 9, { gift_via: 'Zelle', gift_side: 'groom' })
+  ];
+  function sum(f){ return tx.filter(f).reduce(function(a, t){ return a + t.amount; }, 0); }
+  var paid = sum(function(t){ return t.status === 'paid'; });
+  var due = sum(function(t){ return t.status === 'due'; });
+  out.wedding = {
+    money: { paid: paid, due: due, committed: paid + due,
+             received: sum(function(t){ return t.status === 'received'; }) },
+    transactions: tx,
+    tx_groups: groups,
+    money_promised: [
+      { id: 31, amount: 1000, label: 'Grandma June promised toward catering', date_label: 'before the day',
+        details: null, group_id: 20, covers_group_id: 3, is_estimate: false, vendor: null }
+    ]
+  };
+  out.shop = {};
+  return out;
 };

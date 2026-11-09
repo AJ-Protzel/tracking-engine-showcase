@@ -8,6 +8,10 @@
   border:1px solid var(--ink);border-radius:999px;padding:10px 16px}
 .badge-ask[hidden]{display:none}
 
+/* ===== free-plan headroom ===== */
+.usage{margin:0 0 12px;font-size:12px;color:var(--ink-3)}
+.usage[hidden]{display:none}
+
 /* ===== job tracking ===== */
 /* Three running totals, all-time. Counts rather than a list: the threads are
    in Gmail already, and what the page adds is the tally. */
@@ -18,7 +22,7 @@
 .job-row:last-child{padding-bottom:0}
 .job-row+.job-row{border-top:1px solid var(--line-2)}
 .job-name{font-size:15px;font-weight:600;color:var(--ink-2)}
-.job-n{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:20px;
+.job-n{font-family:var(--body);font-size:20px;
   font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;
   color:var(--ink)}
 
@@ -42,6 +46,12 @@ ul.act .todo-item{border-top:0}
   background:none;color:var(--ink-2)}
 .file-opt[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);
   color:var(--on-ink)}
+.file-pick.teach{padding-top:0}
+.teach-note{display:flex;gap:8px;padding:0 0 12px 31px}
+.teach-note input{flex:1;min-width:0;box-sizing:border-box;font:inherit;font-size:16px;
+  color:var(--ink);background:var(--card);border:1px solid var(--line);
+  border-radius:8px;padding:6px 10px}
+.file-pick[hidden],.teach-note[hidden]{display:none}
 /* a charge with no category: its line, then a chip per category */
 .act-uncat{padding:11px 0 0;font-size:15px;line-height:1.45}
 ul.act>li.act-uncat:first-child{padding-top:0}
@@ -51,9 +61,15 @@ ul.act>li.act-uncat:first-child{padding-top:0}
   font:inherit;font-size:16px;color:var(--ink);background:var(--card);
   border:1px solid var(--line);border-radius:10px;padding:8px 12px}
 .cat-pick{flex-wrap:wrap;padding:10px 0 12px}
-.cat-pick[aria-busy="true"]{opacity:.5;pointer-events:none}
+.cat-pick[aria-busy="true"],.act-uncat[aria-busy="true"]{opacity:.5;pointer-events:none}
+.tag-pick{padding-top:0}
+.uncat-acts{display:flex;align-items:center;gap:10px;padding:0 0 12px}
+.uncat-save{font:inherit;font-size:13px;font-weight:600;cursor:pointer;
+  padding:8px 18px;border-radius:9px;border:1px solid var(--ink);
+  background:var(--ink);color:var(--on-ink)}
+.uncat-save:disabled{opacity:.4;cursor:default}
 .all-clear{margin:0;color:var(--ink-3);font-size:14px}
-.tag{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10px;
+.tag{font-family:var(--body);font-size:10px;
   text-transform:uppercase;letter-spacing:.07em;padding:3px 7px;border-radius:5px;
   flex:none;margin-top:3px;background:var(--warn-soft);color:var(--warn)}
 
@@ -71,6 +87,17 @@ ul.sets:empty{display:none}
 .set-why{margin:6px 0 0;font-size:13px;line-height:1.45;color:var(--ink-2)}
 .set-acts{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
 .set-go{font-size:14px;font-weight:600;color:var(--accent);margin-right:4px}
+
+/* ===== highlights ===== */
+ul.hls{list-style:none;margin:0;padding:0}
+ul.hls:empty{display:none}
+.hl{display:flex;align-items:baseline;gap:10px;padding:10px 0;border-top:1px solid var(--line-2)}
+.hl:first-child{border-top:0;padding-top:0}
+.hl-note{flex:1;min-width:0;font-size:15px;line-height:1.45;color:var(--ink);
+  text-decoration:none;overflow-wrap:anywhere}
+.hl-when{flex:none;font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.hl-x{flex:none;font:inherit;font-size:18px;line-height:1;cursor:pointer;
+  padding:2px 6px;border:0;background:none;color:var(--ink-3)}
 
 /* ===== to do ===== */
 /* 16px in the field, or iOS zooms the page when it is focused */
@@ -96,7 +123,10 @@ ul.todos li:first-child .todo-item{border-top:0}
 .todo-item.done .todo-box{background:var(--in);border-color:var(--in);
   color:var(--on-ink)}
 .todo-item.done .todo-text{text-decoration:line-through;color:var(--ink-3)}
-#todoNote{margin-top:10px}
 /* To Do | Backlog */
 .todo-tabs{display:flex;gap:8px;margin-bottom:12px}
 
+
+/* ===== a deadline on a Requires Action item ===== */
+.act-due{display:block;margin-top:2px;font-size:12px;color:var(--ink-2)}
+.act-due.soon{color:var(--warn);font-weight:700}

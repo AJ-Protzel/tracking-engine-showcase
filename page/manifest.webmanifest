@@ -1,6 +1,6 @@
 {
-  "name": "Tracking Engine",
-  "short_name": "Tracking",
+  "name": "Norns",
+  "short_name": "Norns",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
