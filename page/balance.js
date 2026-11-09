@@ -44,8 +44,10 @@
 })();
 
 /* ---- money: one array in, everything else derived ----
-   The navigator picks a month; the figures, tabs, bars and ledger are all
-   rebuilt for whichever is showing. */
+   One month and one category filter, shared by every money card on screen:
+   the whole card (money.full) and its pieces (figures, categories,
+   transactions). Moving the month in any of them moves all of them. Each
+   card draws only the parts its template has. */
 (function(){
   var CANON = ['dining','grocery','shopping','utility','gas','travel',
                'income'];
@@ -55,28 +57,14 @@
               'August','September','October','November','December'];
   var DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-  var card = document.getElementById('moneyCard');
-  var tabBar = document.getElementById('tabs');
-  var catBox = document.getElementById('cats');
-  var ledger = document.getElementById('ledger');
-  var toggle = document.getElementById('ledgerToggle');
-  var label = document.getElementById('ledgerLabel');
-  var figIn = document.getElementById('figIn');
-  var figOut = document.getElementById('figOut');
-  var figNet = document.getElementById('figNet');
-  var gapNote = document.getElementById('gapNote');
-  var mPrev = document.getElementById('mPrev');
-  var mNext = document.getElementById('mNext');
-  var mLabel = document.getElementById('monthLabel');
+  var I = TEW.list();
   var active = 'all';
-
   var byMonth = {}, months = [], mi = 0;
   var editable = true;       /* a signed-in viewer can rename any row */
-  var openKey = '';          /* the row whose editor is open, across rebuilds */
 
   /* Bucket by calendar month, newest first. mi indexes `months`. */
-  function load(){
-    var list = TE.rows();
+  function load(rows){
+    var list = rows || TE.rows();
     byMonth = {}; months = [];
     list.forEach(function(r){
       var k = r.date.slice(0, 7);
@@ -93,9 +81,9 @@
     var p = str.split('-');
     return new Date(+p[0], (+p[1]) - 1, +p[2]);
   }
+  /* whole dollars everywhere, cents cut off rather than rounded (2026-10-19) */
   function money(n){
-    var s = '$' + Math.abs(n).toLocaleString('en-US',
-      {minimumFractionDigits:2, maximumFractionDigits:2});
+    var s = '$' + Math.trunc(Math.abs(n)).toLocaleString('en-US');
     return n < 0 ? '−' + s : s;
   }
   function monthName(key){
@@ -105,23 +93,50 @@
 
   function current(){ return months.length ? byMonth[months[mi]] : []; }
 
-  /* --- bar graph: spend only, biggest first, for the month on screen ---
+  /* the rows the category filter lets through */
+  function picked(){
+    var all = current();
+    return active === 'all' ? all
+      : active === 'wedding' ? all.filter(function(r){ return r.wed; })
+      : all.filter(function(r){ return r.cat === active && !r.wed; });
+  }
+
+  /* --- bar graph: wedding, then everyday spend biggest first, then income ---
      Uncategorized has no bar: it says nothing about where the money went, and
-     its charges are filed from the Alerts page. They still count in Out. */
-  function buildCats(list){
+     its charges are filed from Requires Action. They still count in Out.
+     A wedding charge leaves its category for one Wedding bar on top, set off
+     by a rule with the month's Out without it under that. Every bar is scaled
+     to the longest everyday bar or the income bar, whichever is longer, so a
+     venue deposit never shrinks the everyday bars to slivers.
+     Wedding money in (a guest's room reservation, a gift by Zelle) is income
+     like any other; a refund on a wedding purchase comes off the Wedding bar. */
+  function buildCats(catBox, list){
     catBox.textContent = '';
-    var spend = {}, max = 0;
+    var spend = {}, max = 0, wed = 0, inc = 0, every = 0;
     list.forEach(function(r){
+      if(r.amt < 0 && !r.wed){ every += -r.amt; }
+      if(r.wed){
+        if(r.amt < 0){ wed += -r.amt; }
+        else if(r.cat === 'income' || r.cat === 'uncategorized'){ inc += r.amt; }
+        else { wed -= r.amt; }
+        return;
+      }
+      if(r.cat === 'income'){ if(r.amt > 0){ inc += r.amt; } return; }
       if(r.amt < 0 && r.cat !== 'uncategorized'){
         spend[r.cat] = (spend[r.cat] || 0) + (-r.amt);
       }
     });
-    var keys = Object.keys(spend).sort(function(a,b){ return spend[b]-spend[a]; });
-    keys.forEach(function(c){ if(spend[c] > max){ max = spend[c]; } });
+    var bars = Object.keys(spend).sort(function(a,b){ return spend[b]-spend[a]; })
+      .map(function(c){ return {tab: c, amt: spend[c], cls: 'cat'}; });
+    bars.forEach(function(x){ if(x.amt > max){ max = x.amt; } });
+    if(inc > max){ max = inc; }
+    if(wed > 0){ bars.unshift({tab: 'wedding', amt: wed, cls: 'cat wed', every: every}); }
+    if(inc > 0){ bars.push({tab: 'income', amt: inc, cls: 'cat inc'}); }
 
-    keys.forEach(function(c){
+    bars.forEach(function(x){
+      var c = x.tab;
       var b = document.createElement('button');
-      b.className = 'cat';
+      b.className = x.cls + (c === active ? ' on' : '');
       b.type = 'button';
       b.setAttribute('data-tab', c);
       var n = document.createElement('span');
@@ -129,43 +144,55 @@
       var bar = document.createElement('span');
       bar.className = 'cat-bar';
       var fill = document.createElement('i');
-      fill.style.width = (max ? (spend[c] / max) * 100 : 0) + '%';
+      fill.style.width = (max ? Math.min(100, (x.amt / max) * 100) : 100) + '%';
       bar.appendChild(fill);
       var amt = document.createElement('span');
       amt.className = 'cat-amt';
-      amt.textContent = '$' + spend[c].toLocaleString('en-US',
-        {minimumFractionDigits:2, maximumFractionDigits:2});
+      amt.textContent = '$' + Math.trunc(x.amt).toLocaleString('en-US');
       b.appendChild(n); b.appendChild(bar); b.appendChild(amt);
       b.addEventListener('click', function(){ pick(c); });
       catBox.appendChild(b);
+      /* the number the Wedding bar exists for: Out without it, heading the rest */
+      if(x.every !== undefined){
+        var p = document.createElement('p');
+        p.className = 'cat-every';
+        p.textContent = 'Without wedding: ' + money(x.every);
+        catBox.appendChild(p);
+      }
     });
   }
 
   /* --- tab strip: All, then only the categories present that month.
-     Uncategorized gets no tab: its charges are filed from the Alerts page. --- */
-  function buildTabs(list){
+     Uncategorized gets no tab: its charges are filed from Requires Action.
+     Wedding comes last, and a wedding charge counts under it alone. --- */
+  function present(list){
+    var seen = {};
+    list.forEach(function(r){
+      var k = r.wed ? 'wedding' : r.cat;
+      seen[k] = (seen[k] || 0) + 1;
+    });
+    return seen;
+  }
+  function buildTabs(tabBar, seen){
     tabBar.textContent = '';
-    var present = {};
-    list.forEach(function(r){ present[r.cat] = (present[r.cat] || 0) + 1; });
-    var order = CANON.filter(function(c){ return present[c]; });
-
+    var order = CANON.concat('wedding').filter(function(c){ return seen[c]; });
     [{k:'all', l:'All'}].concat(order.map(function(c){ return {k:c, l:c}; }))
       .forEach(function(t){
         var b = document.createElement('button');
         b.className = 'tab';
         b.type = 'button';
         b.setAttribute('data-tab', t.k);
+        b.setAttribute('aria-pressed', String(t.k === active));
         b.textContent = t.l;
         b.addEventListener('click', function(){ pick(t.k); });
         tabBar.appendChild(b);
       });
-    return present;
   }
 
   /* --- the editor: rename a charge, or every charge from that merchant --- */
   /* Saved through page_rename, then every row is read again, so what shows
      is what the database now holds rather than the page's guess at it. */
-  function buildEditor(r, host, btn){
+  function buildEditor(v, r, host, btn){
     var same = TE.countByName(r.desc);
     var name = r.desc;
     var cat = r.cat;
@@ -191,7 +218,7 @@
     box.appendChild(b2);
 
     /* no "uncategorized" chip: a charge is filed here, never unfiled, and
-       one with no category is filed from the Alerts page */
+       one with no category is filed from Requires Action */
     var catBtns = [];
     TE.CATS.forEach(function(c){
       var b = document.createElement('button');
@@ -239,6 +266,26 @@
         scopes.appendChild(b);
       });
 
+    /* per charge whatever "Applies to" says: a merchant is never all wedding */
+    var wed = !!r.wed;
+    var b4 = document.createElement('div');
+    b4.className = 'ed-block';
+    var l4 = document.createElement('label');
+    l4.className = 'ed-lab'; l4.textContent = 'Wedding (this charge only)';
+    var wedBox = document.createElement('div');
+    wedBox.className = 'ed-chips';
+    var wedBtn = document.createElement('button');
+    wedBtn.className = 'ed-chip'; wedBtn.type = 'button';
+    wedBtn.textContent = 'wedding';
+    wedBtn.setAttribute('aria-pressed', String(wed));
+    wedBtn.addEventListener('click', function(){
+      wed = !wed;
+      wedBtn.setAttribute('aria-pressed', String(wed));
+    });
+    wedBox.appendChild(wedBtn);
+    b4.appendChild(l4); b4.appendChild(wedBox);
+    box.appendChild(b4);
+
     var acts = document.createElement('div');
     acts.className = 'ed-acts';
     var save = document.createElement('button');
@@ -255,7 +302,7 @@
     box.appendChild(note);
 
     function shut(){
-      openKey = '';
+      v.openKey = '';
       box.remove();
       btn.classList.remove('open');
     }
@@ -267,10 +314,11 @@
       note.textContent = 'Saving…';
       window.TESAVE({ txn_id: r.id, name: clean,
                       cat: cat === 'uncategorized' ? null : cat,
-                      whole: scope === 'merchant' }, function(err){
+                      whole: scope === 'merchant',
+                      wed: wed === !!r.wed ? undefined : wed }, function(err){
         save.disabled = false;
         if(err){ note.textContent = 'Could not save: ' + err + '.'; return; }
-        openKey = '';
+        v.openKey = '';
       });
     });
 
@@ -280,8 +328,10 @@
     return box;
   }
 
-  /* --- the ledger, grouped by day, newest first --- */
-  function buildLedger(list){
+  /* --- the ledger, grouped by day, newest first. Which row's editor is
+     open is each card's own, kept across rebuilds. --- */
+  function buildLedger(v, list){
+    var ledger = v.ledger;
     ledger.textContent = '';
     ledger.classList.toggle('editable', !!editable);
     if(!list.length){
@@ -295,7 +345,8 @@
     if(editable){
       var hint = document.createElement('p');
       hint.className = 'ed-hint';
-      hint.textContent = 'Tap a transaction to rename it or set its category. '
+      hint.textContent = 'Tap a transaction to rename it, set its category '
+        + 'or mark it wedding. '
         + 'Pending ones open once they settle.';
       ledger.appendChild(hint);
     }
@@ -323,8 +374,7 @@
       byDay[d].forEach(function(r){
         var host = document.createElement('div');
         host.className = 'txn-row';
-        /* a pending row is rewritten by every bank pull, so it waits */
-        var canEdit = editable && !r.prov;
+        var canEdit = editable;
         var row = document.createElement(canEdit ? 'button' : 'div');
         row.className = 'txn';
         if(canEdit){ row.type = 'button'; }
@@ -335,13 +385,8 @@
         var mt = document.createElement('div');
         /* the card it went on, then its category */
         mt.className = 'txn-meta';
-        mt.textContent = (r.card ? r.card + ' · ' : '') + r.cat;
-        if(r.prov){
-          mt.appendChild(document.createTextNode(' · '));
-          var pv = document.createElement('span');
-          pv.className = 'prov'; pv.textContent = 'pending';
-          mt.appendChild(pv);
-        }
+        mt.textContent = (r.card ? r.card + ' · ' : '') + r.cat
+          + (r.wed ? ' · wedding' : '');
         main.appendChild(nm); main.appendChild(mt);
         var amt = document.createElement('div');
         amt.className = 'txn-amt' + (r.amt > 0 ? ' pos' : '');
@@ -353,8 +398,8 @@
         if(canEdit){
           var key = TE.keyOf(r);
           row.addEventListener('click', function(){
-            if(openKey === key){
-              openKey = '';
+            if(v.openKey === key){
+              v.openKey = '';
               var open = host.querySelector('.txn-edit');
               if(open){ open.remove(); }
               row.classList.remove('open');
@@ -364,10 +409,10 @@
             if(live){ live.remove(); }
             var lit = ledger.querySelector('.txn.open');
             if(lit){ lit.classList.remove('open'); }
-            openKey = key;
-            buildEditor(r, host, row);
+            v.openKey = key;
+            buildEditor(v, r, host, row);
           });
-          if(openKey === key){ buildEditor(r, host, row); }
+          if(v.openKey === key){ buildEditor(v, r, host, row); }
         }
       });
       wrap.appendChild(box);
@@ -375,80 +420,106 @@
     });
   }
 
-  /* Rebuild everything for the month on screen, keeping the chosen category
-     when that month also has it. */
-  function showMonth(){
-    var list = current();
-    var key = months.length ? months[mi] : '';
+  /* One card, whichever parts it has. */
+  function draw(v){
+    var all = current(), key = months.length ? months[mi] : '';
+    var seen = present(all);
+    if(active !== 'all' && !seen[active]){ active = 'all'; }
+    var list = picked();
 
-    mLabel.textContent = key ? monthName(key) : 'No transactions';
-    /* months[] is newest-first, so a HIGHER index is further back */
-    mNext.disabled = mi <= 0;
-    mPrev.disabled = mi >= months.length - 1;
-
-    var present = buildTabs(list);
-    buildCats(list);
-    if(active !== 'all' && !present[active]){ active = 'all'; }
-
-    var from = window.__completeFrom || '';
-    var thin = from && key && key < from;
-    gapNote.hidden = !thin;
-    if(thin){
-      gapNote.textContent = 'The bank feed only reaches back to '
-        + monthName(from) + ', so this month is incomplete — some accounts have '
-        + 'no data before then.';
+    if(v.label){
+      v.label.textContent = key ? monthName(key) : 'No transactions';
+      /* months[] is newest-first, so a HIGHER index is further back */
+      v.next.disabled = mi <= 0;
+      v.prev.disabled = mi >= months.length - 1;
     }
-    pick(active);
+    if(v.tabs){ buildTabs(v.tabs, seen); }
+    if(v.cats){ buildCats(v.cats, all); }
+    v.root.classList.toggle('picked', active !== 'all');
+
+    if(v.in){
+      var inSum = 0, outSum = 0;
+      list.forEach(function(r){
+        if(r.amt > 0){ inSum += r.amt; } else { outSum += -r.amt; }
+      });
+      v.in.textContent = money(inSum);
+      v.out.textContent = money(outSum);
+      v.net.textContent = money(inSum - outSum);
+    }
+
+    if(v.gap){
+      var from = window.__completeFrom || '';
+      var thin = from && key && key < from;
+      v.gap.hidden = !thin;
+      if(thin){
+        v.gap.textContent = 'The bank feed only reaches back to '
+          + monthName(from) + ', so this month is incomplete: some accounts have '
+          + 'no data before then.';
+      }
+    }
+
+    if(v.ledger && !v.ledger.hidden){ buildLedger(v, list); }
+    if(v.ledgerLabel){
+      v.ledgerLabel.textContent = (v.ledger.hidden ? 'Show ' : 'Hide ') + list.length
+        + (list.length === 1 ? ' transaction' : ' transactions');
+    }
+    if(v.n){ v.n.textContent = String(list.length); }
+  }
+  function drawAll(){ I.each(draw); }
+
+  function pick(cat){ active = cat; drawAll(); }
+
+  /* a made-up month: a few charges and a paycheck */
+  function sampleRows(){
+    return [['Taco Spot', 'dining', -38, 2], ['Noodle Bar', 'dining', -24, 6],
+            ['Grocer', 'grocery', -96, 1], ['Grocer', 'grocery', -71, 8],
+            ['Hardware', 'shopping', -45, 4], ['Fuel', 'gas', -40, 3],
+            ['Payroll', 'income', 3000, 5]].map(function(x, i){
+      return {id: 's' + i, date: TEW.ago(x[3]), desc: x[0], cat: x[1], amt: x[2], wed: false, card: 'Card'};
+    });
   }
 
-  function pick(cat){
-    active = cat;
-    var all = current();
-    var list = cat === 'all' ? all
-      : all.filter(function(r){ return r.cat === cat; });
-
-    var inSum = 0, outSum = 0;
-    list.forEach(function(r){
-      if(r.amt > 0){ inSum += r.amt; } else { outSum += -r.amt; }
-    });
-    figIn.textContent = money(inSum);
-    figOut.textContent = money(outSum);
-    figNet.textContent = money(inSum - outSum);
-
-    Array.prototype.forEach.call(tabBar.children, function(b){
-      b.setAttribute('aria-pressed',
-        String(b.getAttribute('data-tab') === cat));
-    });
-    Array.prototype.forEach.call(catBox.children, function(b){
-      b.classList.toggle('on', b.getAttribute('data-tab') === cat);
-    });
-    card.classList.toggle('picked', cat !== 'all');
-
-    buildLedger(list);
-    label.textContent = (ledger.hidden ? 'Show ' : 'Hide ') + list.length
-      + (list.length === 1 ? ' transaction' : ' transactions');
+  function mount(root, c){
+    var v = {root: root, openKey: ''};
+    ['prev', 'next', 'label', 'in', 'out', 'net', 'tabs', 'cats', 'toggle',
+     'ledgerLabel', 'ledger', 'gap', 'n'].forEach(function(k){ v[k] = c.r(k); });
+    if(c.sample){
+      editable = false;
+      TEW.swap(function(){ return [byMonth, months, mi, active]; },
+        function(o){ byMonth = o[0]; months = o[1]; mi = o[2]; active = o[3]; },
+        [{}, [], 0, 'all'], function(){ load(sampleRows()); draw(v); });
+      editable = true;
+      return;
+    }
+    if(v.prev){
+      v.prev.addEventListener('click', function(){
+        if(mi < months.length - 1){ mi++; drawAll(); }
+      });
+      v.next.addEventListener('click', function(){
+        if(mi > 0){ mi--; drawAll(); }
+      });
+      v.label.addEventListener('click', function(){
+        if(mi !== 0){ mi = 0; drawAll(); }
+      });
+    }
+    if(v.toggle){
+      v.toggle.addEventListener('click', function(){
+        v.ledger.hidden = !v.ledger.hidden;
+        v.toggle.setAttribute('aria-expanded', String(!v.ledger.hidden));
+        draw(v);
+      });
+    }
+    draw(v);
+    return I.add(v);
   }
 
-  mPrev.addEventListener('click', function(){
-    if(mi < months.length - 1){ mi++; showMonth(); }
-  });
-  mNext.addEventListener('click', function(){
-    if(mi > 0){ mi--; showMonth(); }
-  });
-  mLabel.addEventListener('click', function(){
-    if(mi !== 0){ mi = 0; showMonth(); }
-  });
+  TEW.define('money.full', {type: 'Money', version: 'Whole card', title: 'Money', mount: mount});
+  TEW.define('money.figures', {type: 'Money', version: 'In, out and net', title: 'Month', mount: mount});
+  TEW.define('money.categories', {type: 'Money', version: 'Spend by category', title: 'Spend by Category', tab: 'Categories', mount: mount});
+  TEW.define('money.transactions', {type: 'Money', version: 'Transactions', title: 'Transactions', mount: mount});
 
-  toggle.addEventListener('click', function(){
-    ledger.hidden = !ledger.hidden;
-    toggle.setAttribute('aria-expanded', String(!ledger.hidden));
-    pick(active);
-  });
-
-  TE.subscribe(function(){ load(); showMonth(); });
+  TE.subscribe(function(){ load(); drawAll(); });
   load();
-  showMonth();
-
 })();
 
 /* ---- spending: four calendar weeks of days ----
@@ -462,8 +533,11 @@
    and totals keep filling in as the late charges land.
 
    The caps in #budget set the day budget — their weekly total over seven days,
-   about $23 — so a square is green while its day is within that and red once it
-   is past, and the same colour means the same money every week. They also
+   about $23 — so a square fades from green to grey as its day nears that, then
+   runs smoothly from yellow the moment it passes to deep red at deep_red_at,
+   $100: anything past that is a real problem or a big purchase. The same
+   colour means the same money every week. Both numbers are typed under the
+   squares, saved in engine_settings. They also
    colour the week totals: red once a week passes their total, green once a week
    has ended at or under it. A week still running that is under stays
    uncoloured — it has days left to go over in. */
@@ -475,26 +549,27 @@
   /* how many days back a square may still be missing charges */
   var POSTING_LAG = 3;
 
-  var caps = {dining:25, grocery:110, shopping:25}, span = 4, limit = 0, exempt = [],
-      deep = 0;
+  var caps = {dining:25, grocery:110, shopping:25}, span = 4, since = '2026-08-01',
+      limit = 0, exempt = [],
+      top0 = 100;
   try {
     var cfg = JSON.parse(document.getElementById('budget').textContent) || {};
     if(cfg.caps){ caps = cfg.caps; }
     if(cfg.weeks){ span = cfg.weeks; }
+    if(cfg.since){ since = cfg.since; }
     if(cfg.leave_out_over){ limit = Number(cfg.leave_out_over) || 0; }
     if(cfg.always_count){ exempt = cfg.always_count; }
-    if(cfg.deep_red_over){ deep = Number(cfg.deep_red_over) || 0; }
+    if(cfg.deep_red_at){ top0 = Number(cfg.deep_red_at) || top0; }
   } catch(e){}
 
   var capTotal = 0;
   ORDER.forEach(function(c){ capTotal += (caps[c] || 0); });
-  /* a day's even share of the weekly caps: where green turns red */
-  var share = capTotal / 7;
+  /* a day's even share of the weekly caps: where grey turns to yellow. The
+     page can set its own instead, and a week's line is then seven of that day. */
+  var share0 = capTotal / 7, share = share0, topv = top0;
 
-  var grid = document.getElementById('budHeat');
-  var legend = document.getElementById('budLegend');
-  var detail = document.getElementById('budDetail');
-  var picked = '';   /* the day whose breakdown is open, kept across reloads */
+  /* each card has its own grid, scroller, open day and boxes */
+  var I = TEW.list();
   var days = {};     /* 'YYYY-MM-DD' -> {total, cat, txns: [{desc, amt, cat, out}]} */
 
   function pad(n){ return (n < 10 ? '0' : '') + n; }
@@ -507,9 +582,10 @@
     var p = str.split('-');
     return new Date(+p[0], (+p[1]) - 1, +p[2]);
   }
-  function whole(n){ return '$' + Math.round(n).toLocaleString('en-US'); }
-  function cents(n){
-    return '$' + n.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  function whole(n){ return '$' + Math.trunc(n).toLocaleString('en-US'); }
+  var cents = whole;
+  function money2(n){
+    return '$' + n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
   }
   function short(d){ return MON[d.getMonth()] + ' ' + d.getDate(); }
   function el(tag, cls, text){
@@ -519,58 +595,140 @@
     return e;
   }
 
-  /* g2 up to a third of the day's share, g1 up to two thirds, n up to the
-     share, r1 up to twice it, r2 beyond, r3 past the flat deep_red_over */
-  function shade(v){
-    if(deep > 0 && v > deep){ return 'r3'; }
-    if(v <= share / 3){ return 'g2'; }
-    if(v <= share * 2 / 3){ return 'g1'; }
-    if(v <= share){ return 'n'; }
-    if(v <= share * 2){ return 'r1'; }
-    return 'r2';
+  /* The colour at a day total: green at $0 fading to grey at the budget, then
+     yellow the moment it is past, through orange and red, to deep red at the
+     top number and beyond. Both numbers are typed under the squares. Mixed in oklab between the theme's stops. */
+  function stops(){
+    var s = topv - share;
+    return [[0, '--heat-g'], [share * 0.6, '--heat-g2'], [share, '--heat-n'],
+            [share + 0.01, '--heat-y'], [share + s * 0.35, '--heat-o'],
+            [share + s * 0.7, '--heat-r'], [topv, '--heat-r3']];
+  }
+  function colour(v){
+    var st = stops();
+    if(v <= 0){ return 'var(' + st[0][1] + ')'; }
+    for(var i = 1; i < st.length; i++){
+      if(v <= st[i][0]){
+        var a = st[i - 1], b = st[i];
+        var p = Math.round((v - a[0]) / ((b[0] - a[0]) || 1) * 100);
+        return 'color-mix(in oklab, var(' + b[1] + ') ' + p + '%, var(' + a[1] + '))';
+      }
+    }
+    return 'var(' + st[st.length - 1][1] + ')';
+  }
+  /* dark numbers on the pale greens and yellows, white past halfway to the top */
+  function paint(b, v){
+    b.style.background = colour(v);
+    if(v <= share){ b.className += v <= share * 0.3 ? ' lite' : ''; return; }
+    b.className += (v - share) / (topv - share) > 0.5 ? ' hot' : ' lite';
   }
 
-  function tally(){
-    var rows = TE.rows(), i, r, d;
+  /* ---- money back, carried to the day it was spent ----
+     A refund ("Costco: [refund]" +$23) or a card credit naming the merchant
+     ("Platinum Lululemon Credit" +$75) comes off one charge it pays for, on
+     that charge's day, so a square shows what the day really cost. The
+     merchant is the name before any colon, brackets dropped. A refund wants
+     the same merchant; a credit wants its merchant's words inside the
+     charge's. The charge is on or before the money back, within BACK_DAYS:
+     the exact amount first, then the same card, then the latest. A credit
+     naming no merchant ("Amex Dining Credit") finds nothing and changes
+     nothing. Returns charge id -> [{amt, desc, date}]. */
+  var BACK_DAYS = 60;
+  function merchant(desc){
+    return String(desc).split(':')[0].replace(/\[[^\]]*\]/g, ' ')
+      .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+  function matchBacks(rows){
+    var charges = rows.filter(function(r){ return r.amt < 0; })
+      .map(function(r){ return {r: r, key: merchant(r.desc), left: -r.amt}; });
+    var backs = {};
+    rows.filter(function(r){ return r.amt > 0; })
+      .sort(function(a, b){ return a.date < b.date ? -1 : 1; })
+      .forEach(function(c){
+        var key = merchant(c.desc), credit = / credit$/.test(key);
+        if(credit){
+          key = key.replace(/ credit$/, '')
+            .replace(/^((amex|american express|platinum|gold|green) )+/, '').trim();
+        }
+        if(key.length < 3){ return; }
+        var cut = iso(new Date(parse(c.date).getTime() - BACK_DAYS * 86400000));
+        var fits = charges.filter(function(x){
+          return x.left > 0.005 && x.r.date <= c.date && x.r.date >= cut
+            && (credit ? (' ' + x.key + ' ').indexOf(' ' + key + ' ') !== -1
+                       : x.key === key);
+        });
+        if(!fits.length){ return; }
+        function exact(x){ return Math.abs(x.left - c.amt) < 0.005 ? 1 : 0; }
+        fits.sort(function(a, b){
+          return (exact(b) - exact(a))
+            || ((b.r.card === c.card) - (a.r.card === c.card))
+            || (a.r.date < b.r.date ? 1 : a.r.date > b.r.date ? -1 : 0);
+        });
+        var x = fits[0], take = Math.min(c.amt, x.left);
+        x.left -= take;
+        (backs[x.r.id] || (backs[x.r.id] = []))
+          .push({amt: take, desc: c.desc, date: c.date});
+      });
+    return backs;
+  }
+
+  function tally(list){
+    var rows = list || TE.rows(), i, r, d;
+    var backs = matchBacks(rows);
     days = {};
     for(i = 0; i < rows.length; i++){
       r = rows[i];
       if(!(r.amt < 0) || !Object.prototype.hasOwnProperty.call(caps, r.cat)){ continue; }
       d = days[r.date] || (days[r.date] = {total: 0, cat: {}, txns: []});
+      var back = (backs[r.id] || []).reduce(function(n, b){ return n + b.amt; }, 0);
+      var net = Math.max(0, -r.amt - back);
       /* too large to be a treat: listed in the day's detail, not counted */
       var desc = r.desc.toLowerCase();
-      var out = limit > 0 && -r.amt > limit && !exempt.some(function(m){
+      var out = limit > 0 && net > limit && !exempt.some(function(m){
         return desc.indexOf(m) !== -1;
       });
-      d.txns.push({desc: r.desc, amt: -r.amt, cat: r.cat, out: out, pending: r.prov});
-      if(out){ continue; }
-      d.cat[r.cat] = (d.cat[r.cat] || 0) + (-r.amt);
-      d.total += -r.amt;
+      d.txns.push({desc: r.desc, amt: net, was: -r.amt, backs: backs[r.id] || [],
+                   cat: r.cat, out: out, wed: !!r.wed});
+      /* wedding charges are listed but never count toward the day */
+      if(out || r.wed){ continue; }
+      d.cat[r.cat] = (d.cat[r.cat] || 0) + net;
+      d.total += net;
     }
   }
 
-  function showDetail(){
+  function showDetail(v){
+    var detail = v.detail;
     detail.textContent = '';
-    if(!picked){
+    if(!v.picked){
       detail.textContent = 'Tap a day to see what was spent.';
       return;
     }
-    var when = parse(picked), d = days[picked] || {total: 0, cat: {}, txns: []};
+    var when = parse(v.picked), d = days[v.picked] || {total: 0, cat: {}, txns: []};
     var today = new Date(); today.setHours(0, 0, 0, 0);
-    detail.appendChild(el('b', '', DAYS[when.getDay()] + ', ' + short(when)));
-    detail.appendChild(document.createTextNode(' · ' + cents(d.total) + ' spent'));
-    detail.appendChild(el('span', 'cats-line',
-      ORDER.map(function(c){ return c + ' ' + cents(d.cat[c] || 0); }).join(' · ')));
+    var head = el('div', 'day-head');
+    head.appendChild(el('b', '', DAYS[when.getDay()] + ', ' + short(when)));
+    head.appendChild(el('span', 'day-total', cents(d.total)));
+    detail.appendChild(head);
     if(d.txns.length){
       var list = el('ul', 'day-txns');
       d.txns.slice().sort(function(a, b){ return b.amt - a.amt; }).forEach(function(t){
-        var li = el('li', 'day-txn' + (t.out ? ' out' : ''));
+        var li = el('li', 'day-txn' + (t.out || t.wed ? ' out' : ''));
         var name = el('span', 'day-txn-name', t.desc);
         name.appendChild(el('span', 'day-txn-meta', t.cat
-          + (t.pending ? ' · pending' : '')
-          + (t.out ? ' · left out, over ' + whole(limit) : '')));
+          + (t.wed ? ' · wedding, not counted'
+             : t.out ? ' · left out, over ' + whole(limit) : '')));
+        t.backs.forEach(function(bk){
+          name.appendChild(el('span', 'day-txn-meta day-txn-back',
+            '\u2212' + money2(bk.amt) + ' ' + bk.desc + ', ' + short(parse(bk.date))));
+        });
         li.appendChild(name);
-        li.appendChild(el('span', 'day-txn-amt', cents(t.amt)));
+        var amtEl = el('span', 'day-txn-amt');
+        if(t.backs.length){
+          amtEl.appendChild(el('s', 'day-txn-was', money2(t.was)));
+          amtEl.appendChild(document.createTextNode(' '));
+        }
+        amtEl.appendChild(document.createTextNode(t.backs.length ? money2(t.amt) : cents(t.amt)));
+        li.appendChild(amtEl);
         list.appendChild(li);
       });
       detail.appendChild(list);
@@ -583,24 +741,42 @@
 
   function render(){
     tally();
+    I.each(draw);
+  }
+
+  function draw(v){
+    var grid = v.heat;
     var today = new Date(); today.setHours(0, 0, 0, 0);
     var todayIso = iso(today);
     var sunday = new Date(today);
     sunday.setDate(sunday.getDate() - today.getDay());
-    var first = new Date(sunday);
-    first.setDate(first.getDate() - 7 * (span - 1));
+    /* every week from the one holding `since` down to this week at the
+       bottom; the box shows four weeks (balance.css), opens at the bottom
+       and scrolls up to the older ones */
+    var oldest = parse(since);
+    oldest.setDate(oldest.getDate() - oldest.getDay());
+    var weeks = Math.max(span, Math.round((sunday - oldest) / (7 * 86400000)) + 1);
 
+    var keep = v.scroller ? v.scroller.scrollTop : 0;
     grid.textContent = '';
-    grid.appendChild(el('span', 'heat-h', ''));
+    var headRow = el('div', 'heat');
+    headRow.appendChild(el('span', 'heat-h', ''));
     ['S','M','T','W','T','F','S'].forEach(function(h){
-      grid.appendChild(el('span', 'heat-h', h));
+      headRow.appendChild(el('span', 'heat-h', h));
     });
-    grid.appendChild(el('span', 'heat-h', 'week'));
+    headRow.appendChild(el('span', 'heat-h', 'week'));
+    grid.appendChild(headRow);
+    /* a column-reverse box starts at its bottom, and its scrollTop counts
+       up from there, so keeping it keeps the place across a reload */
+    var scroller = v.scroller = el('div', 'heat-scroll');
+    grid.appendChild(scroller);
+    grid = el('div', 'heat');
+    scroller.appendChild(grid);
 
-    for(var w = 0; w < span; w++){
-      var start = new Date(first);
-      start.setDate(start.getDate() + 7 * w);
-      grid.appendChild(el('span', 'heat-wk' + (w === span - 1 ? ' now' : ''), short(start)));
+    for(var w = weeks - 1; w >= 0; w--){
+      var start = new Date(sunday);
+      start.setDate(start.getDate() - 7 * w);
+      grid.appendChild(el('span', 'heat-wk' + (w === 0 ? ' now' : ''), short(start)));
       var total = 0;
       for(var k = 0; k < 7; k++){
         var day = new Date(start);
@@ -616,14 +792,14 @@
           var spent = (days[key] || {total: 0}).total;
           total += spent;
           var unposted = spent <= 0 && (today - day) / 86400000 < POSTING_LAG;
-          b.className += (unposted ? '' : ' ' + shade(spent))
-            + (key === todayIso ? ' today' : '');
+          if(!unposted){ paint(b, spent); }
+          b.className += key === todayIso ? ' today' : '';
           b.setAttribute('aria-label', short(day) + ', ' + whole(spent));
-          b.setAttribute('aria-pressed', String(key === picked));
+          b.setAttribute('aria-pressed', String(key === v.picked));
           (function(k2){
             b.addEventListener('click', function(){
-              picked = picked === k2 ? '' : k2;
-              render();
+              v.picked = v.picked === k2 ? '' : k2;
+              draw(v);
             });
           })(key);
         }
@@ -631,24 +807,100 @@
       }
       var last = new Date(start);
       last.setDate(last.getDate() + 6);
-      var verdict = total > capTotal ? ' over' : (last < today ? ' under' : '');
+      var verdict = total > share * 7 ? ' over' : (last < today ? ' under' : '');
       grid.appendChild(el('span', 'heat-tot' + verdict, whole(total)));
     }
+    scroller.scrollTop = keep;
 
-    legend.textContent = '';
-    legend.appendChild(el('span', '', '$0'));
-    ['g2', 'g1', 'n', 'r1', 'r2'].concat(deep > 0 ? ['r3'] : []).forEach(function(c){
-      if(c === 'r1'){ legend.appendChild(el('span', '', whole(share) + '/day')); }
-      if(c === 'r3'){ legend.appendChild(el('span', '', whole(deep))); }
-      legend.appendChild(el('i', 'heat-d ' + c));
-    });
-    legend.appendChild(el('span', '', 'more'));
+    drawBar(v);
 
-    showDetail();
+    showDetail(v);
   }
 
+  /* ---- the two numbers under the squares ----
+     Typed boxes: the day budget (grey) and where the colour reaches deep red.
+     Built once, so a render never wipes a box mid-typing; a value saves a
+     moment after the last keystroke, and only once it makes sense (the top at
+     least $10 over the budget). */
+  var saveTimer = {};
+  function save(v, key, val){
+    clearTimeout(saveTimer[key]);
+    saveTimer[key] = setTimeout(function(){
+      window.TERPC('page_setting_set', {p_key: key, p_value: val}, function(err){
+        if(err){ v.detail.textContent = 'Could not save: ' + err + '.'; }
+      });
+    }, 700);
+  }
+  function box(v, label, unit, key){
+    var w = el('label', 'hs-num');
+    w.appendChild(el('span', 'hs-lab', label));
+    var f = el('span', 'hs-field');
+    f.appendChild(el('span', '', '$'));
+    var inp = el('input', 'hs-in');
+    inp.type = 'number'; inp.inputMode = 'numeric'; inp.min = '1'; inp.step = '1';
+    f.appendChild(inp);
+    if(unit){ f.appendChild(el('span', '', unit)); }
+    w.appendChild(f);
+    inp.addEventListener('input', function(){
+      var n = Math.round(Number(inp.value));
+      if(!(n >= 1 && n <= 99999)){ return; }
+      var d = key === 'heat_day' ? n : share, t = key === 'heat_top' ? n : topv;
+      if(t < d + 10){ return; }
+      if(key === 'heat_day'){ share = n; } else { topv = n; }
+      save(v, key, n);
+      render();
+    });
+    /* leaving a box with nonsense in it puts back the number in use */
+    inp.addEventListener('blur', function(){ drawBar(v); });
+    return {w: w, inp: inp};
+  }
+  function drawBar(v){
+    var boxes = v.boxes;
+    if(!boxes){
+      v.legend.textContent = '';
+      boxes = v.boxes = {day: box(v, 'Budget', '/day', 'heat_day'),
+                         top: box(v, 'Red at', '', 'heat_top')};
+      v.legend.appendChild(boxes.day.w);
+      v.legend.appendChild(boxes.top.w);
+    }
+    [[boxes.day.inp, share], [boxes.top.inp, topv]].forEach(function(x){
+      if(document.activeElement !== x[0]){ x[0].value = String(Math.round(x[1])); }
+    });
+  }
+
+  /* the saved settings, handed over by data.js on every load */
+  window.TEBUDGET = {
+    set: function(st){
+      st = st || {};
+      share = Number(st.heat_day) || share0;
+      topv = Number(st.heat_top) || top0;
+      if(topv < share + 10){ topv = Math.round(share) + 10; }
+      render();
+    }
+  };
+
+  TEW.define('balance.spending', {type: 'Spending', version: 'Heatmap', title: 'Spending',
+    mount: function(root, c){
+      var v = {heat: c.r('heat'), legend: c.r('legend'), detail: c.r('detail'),
+               scroller: null, picked: '', boxes: null};
+      if(c.sample){
+        /* three weeks of made-up days, a few of them over the budget */
+        var rows = [];
+        for(var k = 0; k < 18; k++){
+          rows.push({id: 's' + k, date: TEW.ago(k), desc: 'Shop', cat: ORDER[k % 3],
+                     amt: -[8, 22, 14, 41, 5, 30, 64][k % 7], wed: false});
+        }
+        TEW.swap(function(){ return [days, since, span]; },
+          function(o){ days = o[0]; since = o[1]; span = o[2]; },
+          [{}, TEW.ago(20), 3], function(){ tally(rows); draw(v); });
+        return;
+      }
+      draw(v);
+      return I.add(v);
+    }});
+
   TE.subscribe(render);
-  render();
+  tally();
 })();
 
 /* ---- card credits: cycle maths, sorting, and what has been claimed ----
@@ -664,11 +916,10 @@
    recorded figure is its only one, and a credit whose cycle has rolled starts
    empty again on its own — no cron, no reset. */
 var TECRED = (function(){
-  var body = document.getElementById('credsBody');
-  var openEl = document.getElementById('creditsOpen');
+  var I = TEW.list();
   var MON = ['Jan','Feb','Mar','Apr','May','Jun',
              'Jul','Aug','Sep','Oct','Nov','Dec'];
-  var items = [];  /* {def, el}, in sort_order, which is also match priority */
+  var items = [];  /* {def}, in sort_order, which is also match priority */
   var due = [];    /* credits inside SOON days with money left, for To Do */
   /* A deadline this close turns the days yellow, and puts the credit on the
      To Do card on Alerts. One number for both, so they cannot disagree. */
@@ -696,16 +947,10 @@ var TECRED = (function(){
   }
 
   function money(n){
-    return '$' + n.toLocaleString('en-US', {maximumFractionDigits:0});
+    return '$' + Math.trunc(n).toLocaleString('en-US');
   }
 
-  /* Cents only where a credit actually has them. */
-  function exact(n){
-    return '$' + n.toLocaleString('en-US', {
-      minimumFractionDigits: (n % 1 === 0) ? 0 : 2,
-      maximumFractionDigits: 2
-    });
-  }
+  var exact = money;
 
   /* A credit worth more in December than the rest of the year. */
   function amtOf(def, d){
@@ -727,8 +972,11 @@ var TECRED = (function(){
   }
 
   function build(defs){
-    items = [];
-    (defs || []).forEach(function(def){
+    items = (defs || []).map(function(def){ return {def: def}; });
+  }
+
+  /* a fresh row for one card; every copy of the card gets its own */
+  function rowEl(def){
       var b = document.createElement('div');
       b.className = 'cred';
       var top = span('cred-top');
@@ -754,8 +1002,7 @@ var TECRED = (function(){
       b.appendChild(span('cred-meta'));
       b.appendChild(track);
       b.appendChild(legend);
-      items.push({ def: def, el: b });
-    });
+      return b;
   }
 
   /* Soonest deadline first. Every credit is its own row: folding the ones that
@@ -763,13 +1010,20 @@ var TECRED = (function(){
      which one to spend this month. Uber Cash is the exception, and one row in
      the table: both cards load it into one Uber balance with one deadline. */
   function render(){
+    due = [];
+    var first = true;
+    I.each(function(v){ draw(v, first); first = false; });
+    if(first){ draw(null, true); }
+  }
+
+  /* record: work out the credits due for To Do on this pass */
+  function draw(v, record){
     var today = new Date();
     today.setHours(0, 0, 0, 0);
     var list = [], open = 0;
-    due = [];
 
     items.forEach(function(item){
-      var def = item.def, row = item.el;
+      var def = item.def, row = rowEl(def);
       var end = endOf(def.period, today);
       var amt = amtOf(def, today);
       var cyc = cycleOf(def.period, today);
@@ -801,8 +1055,12 @@ var TECRED = (function(){
       var when = document.createElement('span');
       when.textContent = days + (days === 1 ? ' day left' : ' days left');
       if(days <= SOON){ when.className = 'soon'; }
-      /* remind false keeps a credit he does not chase off To Do */
-      if(!isUsed && days <= SOON && def.remind !== false){
+      /* remind false keeps a credit he does not chase off To Do. A credit with
+         expected_day pays itself (a subscription on the card): it is nudged
+         only once that day of the month has passed with nothing posted. */
+      var late = !def.expected_day ||
+        (claimed <= 0 && today.getDate() > def.expected_day);
+      if(record && !isUsed && days <= SOON && def.remind !== false && late){
         due.push({ name: def.name, card: def.card, left: left, days: days,
                    end: end, ends: MON[end.getMonth()] + ' ' + end.getDate() });
       }
@@ -824,10 +1082,27 @@ var TECRED = (function(){
 
     /* soonest first, and the bigger credit first where two end together */
     list.sort(function(a, b){ return (a.end - b.end) || (b.amt - a.amt); });
-    body.textContent = '';
-    for(var i = 0; i < list.length; i++){ body.appendChild(list[i].row); }
-    openEl.textContent = money(open) + ' open';
+    if(!v){ return; }
+    v.body.textContent = '';
+    for(var i = 0; i < list.length; i++){ v.body.appendChild(list[i].row); }
+    v.open.textContent = money(open) + ' open';
   }
+
+  TEW.define('balance.credits', {type: 'Credits', version: 'List', title: 'Credits',
+    mount: function(root, c){
+      var v = {body: c.r('body'), open: c.r('open')};
+      if(c.sample){
+        TEW.swap(function(){ return [items, fed]; }, function(o){ items = o[0]; fed = o[1]; },
+          [[{def: {id: 's1', name: 'Dining', card: 'Card', period: 'monthly', amt: 10,
+                   claimed: 4, claimed_as_of: TEW.ago(0), match: 'x'}},
+            {def: {id: 's2', name: 'Streaming', card: 'Card', period: 'monthly', amt: 20,
+                   claimed: 20, claimed_as_of: TEW.ago(0), match: 'x'}}], {}],
+          function(){ draw(v, false); });
+        return;
+      }
+      draw(v, false);
+      return I.add(v);
+    }});
 
   /* A posting counts toward the first credit on the same card whose match is
      in its description, and only inside the cycle in force today — last

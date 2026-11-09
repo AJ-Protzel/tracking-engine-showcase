@@ -1,19 +1,28 @@
 /* ==========================================================================
-   ALERTS — requires action, to do, job tracking.
+   ALERTS: requires action, to do, settlements and job tracking, each a
+   widget (layout.js), and the badge, push and usage line over the first page.
 
    The first two are both secretary_todos, told apart by list. Writes go
    through TERPC, which data.js owns.
    ========================================================================== */
 
 /* ---- the home-screen badge ----
-   The red number on the icon: open Requires Action items plus open to-dos,
-   the same two counts the cards show. iOS draws it only for the home-screen
+   The red number on the icon: open Requires Action items only, the same count
+   that card shows. To-dos and the Wedding page count toward nothing here
+   (2026-09-28). iOS draws it only for the home-screen
    app, and only once notifications are allowed, so the button above the cards
    asks once, from a tap as iOS requires. The number changes when the app is
-   open; nothing pushes it while the app is closed. */
+   open, and with every push from the mail watch while it is closed.
+
+   Push: once the database has a push key, the home-screen app registers
+   sw.js and, the first time on each phone, shows one button to subscribe;
+   iOS wants that from a tap. An existing subscription is sent again on each
+   launch, so one the database dropped comes back by itself. */
 var TEBADGE = (function(){
   var parts = {};
   var ask = document.getElementById('badgeAsk');
+  var pushAsk = document.getElementById('pushAsk');
+  var pushTried = false;
   var home = window.navigator.standalone === true ||
     (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
   var able = home && 'setAppBadge' in navigator && 'Notification' in window;
@@ -38,21 +47,83 @@ var TEBADGE = (function(){
     });
   }
 
+  function keyBytes(s){
+    var b = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4));
+    var out = new Uint8Array(b.length);
+    for(var i = 0; i < b.length; i++){ out[i] = b.charCodeAt(i); }
+    return out;
+  }
+  function save(sub){
+    var j = sub.toJSON();
+    window.TERPC('page_push_subscribe', {
+      p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth
+    }, function(){});
+  }
+  function push(key){
+    if(pushTried || !key || !home || !('serviceWorker' in navigator) || !('PushManager' in window)){
+      return;
+    }
+    pushTried = true;
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+    navigator.serviceWorker.ready.then(function(reg){
+      return reg.pushManager.getSubscription().then(function(sub){
+        if(sub){ save(sub); return; }
+        pushAsk.hidden = false;
+        pushAsk.addEventListener('click', function(){
+          Notification.requestPermission().then(function(p){
+            if(p !== 'granted'){ pushAsk.hidden = true; return; }
+            return reg.pushManager.subscribe({
+              userVisibleOnly: true, applicationServerKey: keyBytes(key)
+            }).then(function(s){ save(s); pushAsk.hidden = true; ask.hidden = true; paint(); });
+          }).catch(function(){
+            pushAsk.textContent = 'Could not turn on alerts. Tap to try again.';
+          });
+        });
+      });
+    }).catch(function(){});
+  }
+
   return {
-    set: function(part, n){ parts[part] = n; paint(); }
+    set: function(part, n){ parts[part] = n; paint(); },
+    push: push
+  };
+})();
+
+/* ---- free-plan headroom ----
+   One quiet line over the cards: Cloudflare Pages builds left this month and
+   database space left, both against the free plans. The build count comes
+   from the newest bank sweep; the size is read live. No history is kept. */
+var TEUSAGE = (function(){
+  var line = document.getElementById('usageLine');
+  return {
+    set: function(u){
+      if(!u){ line.hidden = true; return; }
+      var bits = [], cf = u.cloudflare;
+      if(cf && cf.limit != null){
+        bits.push('Cloudflare ' + (cf.limit - cf.used) + '/' + cf.limit + ' builds left');
+      } else {
+        bits.push('Cloudflare builds unknown' + (cf && cf.error ? ' (' + cf.error + ')' : ''));
+      }
+      if(u.db_bytes != null){
+        var mb = function(b){ return Math.round(b / 1048576); };
+        bits.push('Supabase ' + mb(u.db_limit - u.db_bytes) + '/' + mb(u.db_limit) + ' MB left');
+      }
+      line.textContent = bits.join(' · ');
+      line.hidden = false;
+    }
   };
 })();
 
 /* ---- requires action ----
-   Claude's list for him, in secretary_todos. The sweep raises the items; a tap
-   crosses one off; the next sweep does what crossing it means — files the
-   email, moves a bill to Money/Out — and clears it. Problems sit above the
+   Claude's list for him, in secretary_todos. The 10am sweep and the mail
+   watch raise the items; a tap crosses one off; within about 10 minutes the
+   mail watch does what crossing it means (files the email, moves a bill to
+   Money) and clears it. Items with a deadline come first. Problems sit above the
    items, then charges with no category. Both are worked out on every load
    and clear themselves once fixed, so they cannot be crossed off. */
 var TEACT = (function(){
-  var list = document.getElementById('actList');
-  var countEl = document.getElementById('actCount');
-  var clearEl = document.getElementById('allClear');
+  var I = TEW.list();
+  var data = {actions: [], problems: [], credits: [], uncats: []};
   var TAGS = { draft: 'Draft', mail: 'Mail', no_time: 'No time', bill: 'Bill',
                interview: 'Interview', invite: 'Invite', event_added: 'Added',
                double_booking: 'Clash', subscription: 'Subscription' };
@@ -60,16 +131,11 @@ var TEACT = (function(){
      Trash; everything else already knows where it goes. */
   var CHOOSE = { mail: true, draft: true };
 
-  /* The card never hides itself. An empty card cannot be told from one that
-     failed to load, so the all-clear line stands in its place instead. */
-  function render(){
-    var open = list.querySelectorAll('.act-problem, .act-uncat, .todo-item:not(.done)').length;
-    var any = list.children.length;
-    countEl.textContent = open === 0 ? 'clear' : String(open);
-    countEl.className = open === 0 ? 'count' : 'count act';
-    TEBADGE.set('act', open);
-    list.hidden = any === 0;
-    clearEl.hidden = any !== 0;
+  /* Counted from the data, not from any one card, so the badge is right
+     however many copies of the card are on screen, or none. */
+  function openCount(){
+    return data.problems.length + data.credits.length + data.uncats.length
+      + data.actions.filter(function(a){ return !a.done; }).length;
   }
 
   function tag(text){
@@ -103,6 +169,8 @@ var TEACT = (function(){
     return li;
   }
 
+  /* One of Claude's items. Its state lives on the row itself, so a tap in
+     one copy of the card shows in every copy. */
   function item(a){
     var li = document.createElement('li');
     var b = document.createElement('button');
@@ -113,40 +181,38 @@ var TEACT = (function(){
     box.textContent = '\u2713';
     var main = document.createElement('span');
     main.className = 'act-main';
-    main.appendChild(tag(TAGS[a.kind] || a.kind));
-    main.appendChild(words(a.text, a.detail));
+    /* the mail watch's own rows say New until the 10am sweep reads them */
+    main.appendChild(tag(a.watch ? 'New' : (TAGS[a.kind] || a.kind)));
+    var body = words(a.text, a.detail);
+    if(a.due){
+      var due = new Date(a.due);
+      var when = document.createElement('span');
+      when.className = 'act-due' + (due - Date.now() < 864e5 ? ' soon' : '');
+      when.textContent = 'Due ' + due.toLocaleString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+      });
+      body.insertBefore(when, body.children[1] || null);
+    }
+    main.appendChild(body);
     b.appendChild(box);
     b.appendChild(main);
     li.appendChild(b);
 
-    var done = !!a.done;
-    var fileTo = a.file_to === 'Trash' ? 'Trash' : 'Save';
-    var pick = null;
+    b.className = 'todo-item' + (a.done ? ' done' : '');
+    b.setAttribute('aria-pressed', String(!!a.done));
+    function fileTo(){ return a.file_to === 'Trash' ? 'Trash' : 'Save'; }
 
-    function send(d, back){
+    /* back() undoes the change on screen if the write fails */
+    function send(back){
       window.TERPC('page_todo_set', {
-        p_id: Number(a.id), p_done: d, p_file_to: CHOOSE[a.kind] ? fileTo : null
-      }, function(err){ if(err){ back(); } });
-    }
-
-    function paint(){
-      b.className = 'todo-item' + (done ? ' done' : '');
-      b.setAttribute('aria-pressed', String(done));
-      if(pick){
-        pick.hidden = !done;
-        for(var i = 0; i < pick.children.length; i++){
-          var c = pick.children[i];
-          if(c.tagName === 'BUTTON'){
-            c.setAttribute('aria-pressed', String(c.textContent === fileTo));
-          }
-        }
-      }
-      render();
+        p_id: Number(a.id), p_done: !!a.done, p_file_to: CHOOSE[a.kind] ? fileTo() : null
+      }, function(err){ if(err){ back(); drawAll(); } });
     }
 
     if(CHOOSE[a.kind]){
-      pick = document.createElement('div');
+      var pick = document.createElement('div');
       pick.className = 'file-pick';
+      pick.hidden = !a.done;
       var lab = document.createElement('span');
       lab.className = 'file-lab';
       lab.textContent = 'Then to';
@@ -156,36 +222,99 @@ var TEACT = (function(){
         c.type = 'button';
         c.className = 'file-opt';
         c.textContent = where;
+        c.setAttribute('aria-pressed', String(where === fileTo()));
         c.addEventListener('click', function(){
-          if(where === fileTo){ return; }
-          var was = fileTo;
-          fileTo = where;
-          paint();
-          send(true, function(){ fileTo = was; paint(); });
+          if(where === fileTo()){ return; }
+          var was = a.file_to;
+          a.file_to = where;
+          drawAll();
+          send(function(){ a.file_to = was; });
         });
         pick.appendChild(c);
       });
       li.appendChild(pick);
+
+      /* Teaching the mail sorter: a verdict on the sender (Spam also trashes
+         it) and a free note Claude reads, for what it should do with it. */
+      var teach = document.createElement('div');
+      teach.className = 'file-pick teach';
+      teach.hidden = !a.done;
+      [['spam', 'Spam'], ['quiet', 'Not urgent'], ['important', 'Important']].forEach(function(o){
+        var c = document.createElement('button');
+        c.type = 'button';
+        c.className = 'file-opt';
+        c.textContent = o[1];
+        c.setAttribute('aria-pressed', String(a.verdict === o[0]));
+        c.addEventListener('click', function(){
+          var was = a.verdict, wasTo = a.file_to;
+          a.verdict = was === o[0] ? null : o[0];
+          if(a.verdict === 'spam'){ a.file_to = 'Trash'; }
+          else if(a.file_to === 'Trash' && a.verdict){ a.file_to = 'Save'; }
+          drawAll();
+          window.TERPC('page_todo_feedback', {p_id: Number(a.id), p_verdict: a.verdict || '', p_note: a.note || null},
+            function(err){ if(err){ a.verdict = was; a.file_to = wasTo; drawAll(); } });
+        });
+        teach.appendChild(c);
+      });
+      li.appendChild(teach);
+
+      var nb = document.createElement('div');
+      nb.className = 'teach-note';
+      nb.hidden = !a.done;
+      var box2 = document.createElement('input');
+      box2.type = 'text';
+      box2.maxLength = 500;
+      box2.autocomplete = 'off';
+      box2.placeholder = 'Tell Claude: what it is, how much it matters, what to do';
+      box2.value = a.note || '';
+      box2.setAttribute('aria-label', 'Note to Claude about ' + a.text);
+      var sv = document.createElement('button');
+      sv.type = 'button';
+      sv.className = 'file-opt';
+      sv.textContent = a.note ? 'Saved' : 'Send';
+      function saveNote(){
+        var txt = box2.value.replace(/^\s+|\s+$/g, '');
+        if(txt === (a.note || '')){ return; }
+        var was = a.note;
+        a.note = txt || null;
+        sv.textContent = txt ? 'Saved' : 'Send';
+        window.TERPC('page_todo_feedback', {p_id: Number(a.id), p_verdict: a.verdict || '', p_note: txt || null},
+          function(err){ if(err){ a.note = was; sv.textContent = 'Failed'; } });
+      }
+      sv.addEventListener('click', saveNote);
+      box2.addEventListener('blur', saveNote);
+      box2.addEventListener('input', function(){ sv.textContent = 'Send'; });
+      nb.appendChild(box2);
+      nb.appendChild(sv);
+      li.appendChild(nb);
     }
 
     b.addEventListener('click', function(){
-      done = !done;
-      paint();
-      send(done, function(){ done = !done; paint(); });
+      a.done = !a.done;
+      drawAll();
+      send(function(){ a.done = !a.done; });
     });
-    paint();
     return li;
   }
 
-  /* A settled charge with no category, filed from here with one tap. The
-     name field starts as the bank's name and can be changed first; the tap
-     saves both, for the whole merchant, so its future charges arrive categorized and
-     never land here again. Pending charges wait until they settle: the bank
-     feed rewrites a pending row every four hours, and an edit made to one
-     does not reliably survive. TESAVE reads every row again afterwards,
-     which redraws this list without the row. */
+  /* A settled charge with no category. The name field starts as the bank's
+     name and can be changed first; a tap picks a category, a second row
+     holds the secondary tags (wedding, this charge only), and Save writes
+     them all, the name and category for the whole merchant so its future
+     charges arrive categorized and never land here again. TESAVE reads every
+     row again afterwards, which redraws this list without the row. */
   var SPEND = ['dining','grocery','shopping','utility','gas','travel','transfer'];
   var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  function chip(text, on, click){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'file-opt';
+    b.textContent = text;
+    b.setAttribute('aria-pressed', String(!!on));
+    b.addEventListener('click', click);
+    return b;
+  }
 
   function uncat(r){
     var li = document.createElement('li');
@@ -207,27 +336,67 @@ var TEACT = (function(){
     name.setAttribute('aria-label', 'Name for ' + r.desc);
     li.appendChild(name);
 
+    var cat = '', wed = !!r.wed, busy = false;
+    var save = document.createElement('button');
+
     var pick = document.createElement('div');
     pick.className = 'file-pick cat-pick';
-    SPEND.forEach(function(c){
-      var b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'file-opt';
-      b.textContent = c;
-      b.addEventListener('click', function(){
-        if(pick.getAttribute('aria-busy') === 'true'){ return; }
-        pick.setAttribute('aria-busy', 'true');
-        b.setAttribute('aria-pressed', 'true');
-        var clean = name.value.replace(/^\s+|\s+$/g, '') || r.desc;
-        window.TESAVE({ txn_id: r.id, name: clean, cat: c, whole: true }, function(err){
-          if(!err){ return; }
-          pick.removeAttribute('aria-busy');
-          b.setAttribute('aria-pressed', 'false');
+    var catBtns = SPEND.map(function(c){
+      var b = chip(c, false, function(){
+        if(busy){ return; }
+        cat = c;
+        catBtns.forEach(function(x){
+          x.setAttribute('aria-pressed', String(x === b));
         });
+        save.disabled = false;
       });
       pick.appendChild(b);
+      return b;
     });
     li.appendChild(pick);
+
+    var tags = document.createElement('div');
+    tags.className = 'file-pick cat-pick tag-pick';
+    var tl = document.createElement('span');
+    tl.className = 'file-lab';
+    tl.textContent = 'Tags';
+    tags.appendChild(tl);
+    var wb = chip('wedding', wed, function(){
+      if(busy){ return; }
+      wed = !wed;
+      wb.setAttribute('aria-pressed', String(wed));
+    });
+    tags.appendChild(wb);
+    li.appendChild(tags);
+
+    var acts = document.createElement('div');
+    acts.className = 'uncat-acts';
+    save.type = 'button';
+    save.className = 'uncat-save';
+    save.textContent = 'Save';
+    save.disabled = true;
+    var msg = document.createElement('span');
+    msg.className = 'file-lab';
+    acts.appendChild(save);
+    acts.appendChild(msg);
+    li.appendChild(acts);
+
+    save.addEventListener('click', function(){
+      if(busy || !cat){ return; }
+      busy = true;
+      save.disabled = true;
+      li.setAttribute('aria-busy', 'true');
+      msg.textContent = 'Saving…';
+      var clean = name.value.replace(/^\s+|\s+$/g, '') || r.desc;
+      window.TESAVE({ txn_id: r.id, name: clean, cat: cat, whole: true,
+                      wed: wed === !!r.wed ? undefined : wed }, function(err){
+        if(!err){ return; }
+        busy = false;
+        save.disabled = false;
+        li.removeAttribute('aria-busy');
+        msg.textContent = 'Could not save.';
+      });
+    });
     return li;
   }
 
@@ -246,25 +415,57 @@ var TEACT = (function(){
     return li;
   }
 
-  function setItems(actions, problems){
-    list.textContent = '';
-    (problems || []).forEach(function(p){ list.appendChild(problem(p)); });
-    /* called after TECRED.set, so the credits are already worked out */
-    TECRED.due().forEach(function(c){ list.appendChild(credit(c)); });
-    TE.rows().filter(function(r){
-      return r.cat === 'uncategorized' && !r.prov && r.amt < 0;
-    }).forEach(function(r){ list.appendChild(uncat(r)); });
-    (actions || []).forEach(function(x){ list.appendChild(item(x)); });
-    render();
+  /* The card never hides itself. An empty card cannot be told from one that
+     failed to load, so the all-clear line stands in its place instead. */
+  function draw(v){
+    v.list.textContent = '';
+    data.problems.forEach(function(p){ v.list.appendChild(problem(p)); });
+    data.credits.forEach(function(c){ v.list.appendChild(credit(c)); });
+    data.uncats.forEach(function(r){ v.list.appendChild(uncat(r)); });
+    data.actions.forEach(function(x){ v.list.appendChild(item(x)); });
+    var open = openCount(), any = v.list.children.length;
+    v.count.textContent = String(open);
+    v.count.hidden = open === 0;   /* the all-clear line says it, so no pill reads "clear" */
+    v.list.hidden = any === 0;
+    v.clear.hidden = any !== 0;
+  }
+  function drawAll(){
+    I.each(draw);
+    TEBADGE.set('act', openCount());
   }
 
-  render();
+  function setItems(actions, problems){
+    data.actions = (actions || []).slice();
+    data.problems = (problems || []).slice();
+    /* called after TECRED.set, so the credits are already worked out */
+    data.credits = TECRED.due();
+    data.uncats = TE.rows().filter(function(r){
+      return r.cat === 'uncategorized' && r.amt < 0;
+    });
+    drawAll();
+  }
+
+  var SAMPLE = {problems: [], uncats: [],
+    credits: [{name: 'Dining', card: 'Gold', left: 10, days: 3, ends: 'soon'}],
+    actions: [{id: 0, kind: 'bill', text: 'Pay the water bill', detail: '$42'},
+              {id: 0, kind: 'mail', text: 'Reply to Sam about Saturday'}]};
+
+  TEW.define('alerts.action', {type: 'Requires Action', version: 'List', title: 'Requires Action',
+    mount: function(root, c){
+      var v = {list: c.r('list'), count: c.r('count'), clear: c.r('clear')};
+      if(c.sample){
+        TEW.swap(function(){ return data; }, function(o){ data = o; }, SAMPLE, function(){ draw(v); });
+        return;
+      }
+      draw(v);
+      return I.add(v);
+    }});
   return { setItems: setItems };
 })();
 
 /* One to-do row, shared by To Do and Backlog. A tap crosses it off on screen
-   at once and writes after; a failed write puts it back. after() recounts
-   the list the row sits in. */
+   at once and writes after; a failed write puts it back. The state is kept
+   on the row, and after() redraws every copy of the card. */
 function todoRow(t, after){
   var li = document.createElement('li');
   var b = document.createElement('button');
@@ -291,19 +492,14 @@ function todoRow(t, after){
     b.appendChild(text);
   }
 
-  function mark(done){
-    b.className = 'todo-item' + (done ? ' done' : '');
-    b.setAttribute('aria-pressed', String(done));
-    after();
-  }
-
   b.className = 'todo-item' + (t.done ? ' done' : '');
   b.setAttribute('aria-pressed', String(!!t.done));
   b.addEventListener('click', function(){
-    var done = b.className.indexOf(' done') === -1;
-    mark(done);
+    var done = !t.done;
+    t.done = done;
+    after();
     window.TERPC('page_todo_set', { p_id: Number(t.id), p_done: done, p_file_to: null }, function(err){
-      if(err){ mark(!done); }
+      if(err){ t.done = !done; after(); }
     });
   });
   li.appendChild(b);
@@ -313,68 +509,70 @@ function todoRow(t, after){
 /* ---- to do ----
    secretary_todos (list = 'todo'), through page_todo_add and page_todo_set. */
 var TETODO = (function(){
-  var list = document.getElementById('todoList');
-  var back = document.getElementById('backList');
-  var pane = document.getElementById('todoPane');
-  var tabs = document.getElementById('todoTabs');
-  var tabTodo = document.getElementById('tabTodo');
-  var tabBack = document.getElementById('tabBack');
-  var countEl = document.getElementById('todoCount');
-  var note = document.getElementById('todoNote');
-  var form = document.getElementById('todoForm');
-  var input = document.getElementById('todoInput');
-  var addBtn = form.querySelector('button');
-  var onBack = false;
+  var I = TEW.list();
+  var rows = [], parked = [];
 
-  /* The header count and the badge are To Do only; the Backlog tab carries
-     its own number and counts toward nothing. */
-  function render(){
-    var open = list.querySelectorAll('.todo-item:not(.done)').length;
-    var parked = back.querySelectorAll('.todo-item:not(.done)').length;
-    countEl.textContent = String(open);
-    countEl.className = open ? 'count act' : 'count';
-    TEBADGE.set('todo', open);
-    tabTodo.textContent = 'To Do' + (open ? ' ' + open : '');
-    tabBack.textContent = 'Backlog' + (parked ? ' ' + parked : '');
-    tabs.hidden = back.children.length === 0;
-    if(tabs.hidden){ onBack = false; }
-    pane.hidden = onBack;
-    back.hidden = !onBack;
-    tabTodo.setAttribute('aria-pressed', String(!onBack));
-    tabBack.setAttribute('aria-pressed', String(onBack));
-    note.hidden = !(onBack ? back : list).querySelector('.todo-item.done');
+  /* The header count is To Do only, and stays off the icon badge; the Backlog
+     tab carries its own number and counts toward nothing. Which tab shows is
+     each card's own. */
+  function draw(v){
+    v.list.textContent = '';
+    v.back.textContent = '';
+    rows.forEach(function(t){ v.list.appendChild(todoRow(t, drawAll)); });
+    parked.forEach(function(t){ v.back.appendChild(todoRow(t, drawAll)); });
+    var open = rows.filter(function(t){ return !t.done; }).length;
+    var later = parked.filter(function(t){ return !t.done; }).length;
+    v.count.textContent = String(open);
+    v.count.className = open ? 'count act' : 'count';
+    v.tabTodo.textContent = 'To Do' + (open ? ' ' + open : '');
+    v.tabBack.textContent = 'Backlog' + (later ? ' ' + later : '');
+    v.tabs.hidden = parked.length === 0;
+    if(v.tabs.hidden){ v.onBack = false; }
+    v.pane.hidden = v.onBack;
+    v.back.hidden = !v.onBack;
+    v.tabTodo.setAttribute('aria-pressed', String(!v.onBack));
+    v.tabBack.setAttribute('aria-pressed', String(v.onBack));
+  }
+  function drawAll(){ I.each(draw); }
+
+  function set(r, p){
+    rows = (r || []).slice();
+    parked = (p || []).slice();
+    drawAll();
   }
 
-  tabTodo.addEventListener('click', function(){ onBack = false; render(); });
-  tabBack.addEventListener('click', function(){ onBack = true; render(); });
-
-  function item(t){ return todoRow(t, render); }
-
-  /* The text stays in the field until the write succeeds, so a failed add can
-     simply be tried again. */
-  form.addEventListener('submit', function(ev){
-    ev.preventDefault();
-    var text = input.value.replace(/^\s+|\s+$/g, '');
-    if(!text || addBtn.disabled){ return; }
-    addBtn.disabled = true;
-    window.TERPC('page_todo_add', { p_text: text }, function(err, id){
-      addBtn.disabled = false;
-      if(err){ return; }
-      input.value = '';
-      list.appendChild(item({ id: id, text: text, done: false }));
-      render();
-    });
-  });
-
-  function set(rows, parked){
-    list.textContent = '';
-    back.textContent = '';
-    (rows || []).forEach(function(t){ list.appendChild(item(t)); });
-    (parked || []).forEach(function(t){ back.appendChild(item(t)); });
-    render();
-  }
-
-  render();
+  TEW.define('alerts.todo', {type: 'To Do', version: 'List', title: 'To Do',
+    mount: function(root, c){
+      var v = {list: c.r('list'), back: c.r('back'), pane: c.r('pane'), tabs: c.r('tabs'),
+        tabTodo: c.r('tabTodo'), tabBack: c.r('tabBack'), count: c.r('count'),
+        form: c.r('form'), input: c.r('input'), onBack: false};
+      if(c.sample){
+        TEW.swap(function(){ return [rows, parked]; }, function(o){ rows = o[0]; parked = o[1]; },
+          [[{id: 0, text: 'Book the movers'}, {id: 0, text: 'Renew passport', done: true}], []],
+          function(){ draw(v); });
+        return;
+      }
+      var addBtn = v.form.querySelector('button');
+      v.tabTodo.addEventListener('click', function(){ v.onBack = false; draw(v); });
+      v.tabBack.addEventListener('click', function(){ v.onBack = true; draw(v); });
+      /* The text stays in the field until the write succeeds, so a failed add
+         can simply be tried again. */
+      v.form.addEventListener('submit', function(ev){
+        ev.preventDefault();
+        var text = v.input.value.replace(/^\s+|\s+$/g, '');
+        if(!text || addBtn.disabled){ return; }
+        addBtn.disabled = true;
+        window.TERPC('page_todo_add', { p_text: text }, function(err, id){
+          addBtn.disabled = false;
+          if(err){ return; }
+          v.input.value = '';
+          rows.push({ id: id, text: text, done: false });
+          drawAll();
+        });
+      });
+      draw(v);
+      return I.add(v);
+    }});
   return { set: set };
 })();
 
@@ -386,9 +584,7 @@ var TETODO = (function(){
    sending a value the database would reject. A tap moves the row on at once;
    a failed write puts it back. */
 var TESETTLE = (function(){
-  var list = document.getElementById('setList');
-  var countEl = document.getElementById('setCount');
-  var empty = document.getElementById('setEmpty');
+  var I = TEW.list();
   var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var rows = [], known = [];
 
@@ -468,34 +664,132 @@ var TESETTLE = (function(){
     return li;
   }
 
-  function render(){
-    list.textContent = '';
+  function draw(v){
+    v.list.textContent = '';
     var shown = rows.filter(function(r){ return NEXT[r.status]; });
-    shown.forEach(function(r){ list.appendChild(row(r)); });
+    shown.forEach(function(r){ v.list.appendChild(row(r)); });
     var open = shown.filter(function(r){ return r.status !== 'ongoing'; }).length;
-    countEl.textContent = String(open);
-    countEl.className = open ? 'count act' : 'count';
-    empty.hidden = shown.length !== 0;
+    v.count.textContent = String(open);
+    v.count.className = open ? 'count act' : 'count';
+    v.empty.hidden = shown.length !== 0;
   }
+  function render(){ I.each(draw); }
 
-  render();
+  TEW.define('alerts.settlements', {type: 'Settlements', version: 'List', title: 'Settlements',
+    mount: function(root, c){
+      var v = {list: c.r('list'), count: c.r('count'), empty: c.r('empty')};
+      if(c.sample){
+        TEW.swap(function(){ return [rows, known]; }, function(o){ rows = o[0]; known = o[1]; },
+          [[{id: 0, title: 'Example Co data breach', status: 'new', payout: '$50', proof: false,
+             deadline: TEW.ago(-20), evidence: 'You had an account with them.'}], ['new', 'ongoing', 'skipped']],
+          function(){ draw(v); });
+        return;
+      }
+      draw(v);
+      return I.add(v);
+    }});
   return {
     set: function(r, s){ rows = (r || []).slice(); known = (s || []).slice(); render(); }
   };
 })();
 
+/* ---- highlights from the mail sorter ----
+   One row per sender: the newest note, how many there were, when. Tap the
+   note to open the thread in Gmail; the cross dismisses every note from that
+   sender. Read from page_highlights, not page_data. */
+var TEHIGH = (function(){
+  var I = TEW.list(), rows = [];
+  var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function el(tag, cls, text){
+    var e = document.createElement(tag);
+    if(cls){ e.className = cls; }
+    if(text !== undefined && text !== null){ e.textContent = text; }
+    return e;
+  }
+  function when(iso){
+    var d = new Date(iso), t = new Date();
+    if(d.toDateString() === t.toDateString()){
+      return d.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'});
+    }
+    return MON[d.getMonth()] + ' ' + d.getDate();
+  }
+  function row(r){
+    var li = el('li', 'hl');
+    var a = el('a', 'hl-note', r.note);
+    a.href = 'https://mail.google.com/mail/#all/' + encodeURIComponent(r.thread);
+    a.target = '_blank';
+    a.rel = 'noopener';
+    li.appendChild(a);
+    li.appendChild(el('span', 'hl-when', (r.n > 1 ? r.n + ' notes · ' : '') + when(r.at)));
+    var x = el('button', 'hl-x', '×');
+    x.type = 'button';
+    x.setAttribute('aria-label', 'Dismiss');
+    x.addEventListener('click', function(){
+      var was = rows.slice();
+      rows = rows.filter(function(o){ return o.sender !== r.sender; });
+      render();
+      window.TERPC('page_highlight_dismiss', {p_sender: r.sender}, function(err){
+        if(err){ rows = was; render(); }
+      });
+    });
+    li.appendChild(x);
+    return li;
+  }
+  function draw(v){
+    v.list.textContent = '';
+    rows.forEach(function(r){ v.list.appendChild(row(r)); });
+    v.count.textContent = String(rows.length);
+    v.empty.hidden = rows.length !== 0;
+  }
+  function render(){ I.each(draw); }
+  TEW.define('alerts.highlights', {type: 'Highlights', version: 'List', title: 'Highlights',
+    mount: function(root, c){
+      var v = {list: c.r('list'), count: c.r('count'), empty: c.r('empty')};
+      if(c.sample){
+        TEW.swap(function(){ return rows; }, function(o){ rows = o; },
+          [{sender: 'x@example.com', note: 'Zillow: Lori replied about 1400 Elm, free Sunday evening',
+            thread: '', n: 2, at: new Date().toISOString()}], function(){ draw(v); });
+        return;
+      }
+      draw(v);
+      return I.add(v);
+    }});
+  return {
+    load: function(){
+      window.TERPC('page_highlights', {}, function(err, r){
+        rows = err ? [] : (r || []).slice();
+        render();
+      });
+    }
+  };
+})();
+
 /* ---- job tracking, all-time ----
-   Counted from secretary_job_events, which the 1am sweep fills from job mail.
+   Counted from secretary_job_events, which the 3am sweep fills from job mail.
    All-time on purpose: the tally runs until the search ends. */
 var TEJOBS = (function(){
-  function put(id, n){ document.getElementById(id).textContent = n; }
-
+  var I = TEW.list(), n = null;
+  function draw(v){
+    if(!n){ return; }
+    v.apps.textContent = n.application || 0;
+    v.rej.textContent = n.rejection || 0;
+    v.int.textContent = n.interview || 0;
+  }
+  TEW.define('alerts.jobs', {type: 'Job Tracking', version: 'Counts', title: 'Job Tracking',
+    mount: function(root, c){
+      var v = {apps: c.r('apps'), rej: c.r('rej'), int: c.r('int')};
+      if(c.sample){
+        TEW.swap(function(){ return n; }, function(o){ n = o; },
+          {application: 12, rejection: 5, interview: 2}, function(){ draw(v); });
+        return;
+      }
+      draw(v);
+      return I.add(v);
+    }});
   return {
     set: function(j){
-      var n = (j && j.counts) || {};
-      put('jobApps', n.application || 0);
-      put('jobRej', n.rejection || 0);
-      put('jobInt', n.interview || 0);
+      n = (j && j.counts) || {};
+      I.each(draw);
     }
   };
 })();

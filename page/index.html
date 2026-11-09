@@ -3,130 +3,396 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Tracking Engine</title>
+<title>Norns</title>
+<meta name="robots" content="noindex,nofollow">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Tracking">
-<meta name="theme-color" content="#e9edf2" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0c1218" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-title" content="Norns">
+<meta name="theme-color" content="#4f3f33">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="alerts.css">
-<link rel="stylesheet" href="food.css">
-<link rel="stylesheet" href="balance.css">
-<link rel="stylesheet" href="rentals.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Karla:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&family=Averia+Serif+Libre:wght@400;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="alerts.css?v=5">
+<!-- Food is cut off: see "Bringing Food back" in the README -->
+<!-- <link rel="stylesheet" href="food.css"> -->
+<link rel="stylesheet" href="balance.css?v=5">
+<link rel="stylesheet" href="wallet.css?v=4">
+<link rel="stylesheet" href="wedding.css?v=11">
+<link rel="stylesheet" href="wedding-tabs.css?v=6">
 
 </head>
 <body>
 
-<div class="wrap" id="app">
+<div id="signin" class="signin" hidden>
+  <p class="date">Private</p>
+  <h1>Norns</h1>
+  <form id="signinForm">
+    <label>Email<input id="email" type="email" autocomplete="username" autocapitalize="off" required></label>
+    <label>Password<input id="password" type="password" autocomplete="current-password" required></label>
+    <button id="signinBtn" type="submit">Sign in</button>
+    <p class="msg" id="signinMsg"></p>
+    <p class="hint">You stay signed in on this device until you sign out.</p>
+  </form>
+</div>
+
+<div class="wrap" id="app" hidden>
 
 <header class="top">
-  <div class="date" id="briefDate">&nbsp;</div>
-  <p class="demo-note">Demo &middot; sample data, nothing real. Taps and edits work and reset on reload.</p>
   <div class="errbar" id="err" hidden></div>
 </header>
 
-<nav class="pagetabs" role="tablist" aria-label="Pages">
-  <button class="ptab" role="tab" data-page="alerts" aria-selected="true">Alerts</button>
-  <button class="ptab" role="tab" data-page="food" aria-selected="false">Food</button>
-  <button class="ptab" role="tab" data-page="balance" aria-selected="false">Balance</button>
-  <button class="ptab" role="tab" data-page="rentals" aria-selected="false">Rentals</button>
+<!-- The tabs and pages are drawn from the signed-in user's layout (layout.js).
+     A long press on blank space opens edit mode (edit.js). -->
+<nav class="pagetabs" id="ptabs" role="tablist" aria-label="Pages">
+  <button type="button" class="ptab ptab-add" aria-label="New page"><span aria-hidden="true">+</span></button>
 </nav>
 
-<main>
+<main id="pages">
+  <!-- ============ WEDDING ============ -->
+  <!-- The wedding's crew sheet, straight from its public site in a frame
+       (here the invented wedding-tracker demo).
+       wedding.js adds a strip above it with the private tabs (Costs and
+       Shopping), drawn here in the app, never in the shared sheet. Not a
+       card: the layout only places its tab. It stays here, because moving a
+       frame reloads it. -->
+  <div class="page" data-page="wedding" data-kind="wedding" hidden>
+  <div id="wed">
+    <iframe class="sheet" src="https://aj-protzel.github.io/wedding-tracker/" title="Wedding Tracker" loading="lazy"></iframe>
+  </div>
+  </div>
+</main>
 
-  <div class="page" data-page="alerts">
-  <!-- Shown only in the home-screen app, and only until notifications are
-       allowed or refused: iOS draws the icon badge only with that permission. -->
-  <button type="button" class="badge-ask" id="badgeAsk" hidden>Show the count on the home-screen icon</button>
+<!-- Page chrome, not cards: layout.js puts these at the top and foot of the
+     first page of cards. -->
+<div hidden>
+  <div class="chrome" id="chrome">
+    <!-- Shown only in the home-screen app, and only until notifications are
+         allowed or refused: iOS draws the icon badge only with that permission. -->
+    <button type="button" class="badge-ask" id="badgeAsk" hidden>Show the count on the home-screen icon</button>
+    <button type="button" class="badge-ask" id="pushAsk" hidden>Get alerts on this phone</button>
+    <!-- free-plan headroom: Cloudflare builds this month, database size -->
+    <p class="usage" id="usageLine" hidden></p>
+    <!-- set by wallet.js when either transfer is at its best; a tap opens the
+         first page holding an Exchange card -->
+    <button type="button" class="fx-alert" id="fxAlert" hidden></button>
+  </div>
+  <button class="signout" id="signout" type="button">Reset the demo</button>
+</div>
 
-  <!-- ============ REQUIRES ACTION ============ -->
+<!-- ======================================================================
+     WIDGETS. One template per card version; the id in data-w is what layouts
+     store, so never rename one. Elements are found by data-r inside each
+     copy, never by id, because a card can be on screen more than once.
+     ====================================================================== -->
+
+<!-- Requires Action: Claude's list, problems, uncategorized charges, credits running out -->
+<template data-w="alerts.action">
   <section class="card plain">
     <div class="card-head">
       <h2>Requires Action</h2>
-      <span class="count act" id="actCount">0</span>
+      <span class="count act" data-r="count">0</span>
     </div>
     <div class="card-body">
-      <ul class="act" id="actList">
-      </ul>
-      <p class="all-clear" id="allClear" hidden>Nothing outstanding — everything
+      <ul class="act" data-r="list"></ul>
+      <p class="all-clear" data-r="clear" hidden>Nothing outstanding. Everything
         raised this morning has been dealt with.</p>
     </div>
   </section>
+</template>
 
-  <!-- ============ TO DO ============ -->
-  <!-- secretary_todos, list = 'todo', with list = 'backlog' behind a second
-       tab: to-dos he has parked, never counted in the badge. A tap crosses an
-       item off, or back on; one still crossed off when the next 1am sweep
-       runs is cleared. -->
-  <section class="card plain" id="todoCard">
+<!-- To Do: secretary_todos, list = 'todo', with list = 'backlog' behind a
+     second tab. A tap crosses an item off, or back on; one still crossed off
+     when the next sweep runs is cleared. -->
+<template data-w="alerts.todo">
+  <section class="card plain">
     <div class="card-head">
       <h2>To Do</h2>
-      <span class="count" id="todoCount">0</span>
+      <span class="count" data-r="count">0</span>
     </div>
     <div class="card-body">
-      <div class="todo-tabs" id="todoTabs" hidden>
-        <button type="button" class="file-opt" id="tabTodo" aria-pressed="true">To Do</button>
-        <button type="button" class="file-opt" id="tabBack" aria-pressed="false">Backlog</button>
+      <div class="todo-tabs" data-r="tabs" hidden>
+        <button type="button" class="file-opt" data-r="tabTodo" aria-pressed="true">To Do</button>
+        <button type="button" class="file-opt" data-r="tabBack" aria-pressed="false">Backlog</button>
       </div>
-      <div id="todoPane">
-        <form class="todo-add" id="todoForm">
-          <input id="todoInput" type="text" maxlength="200" placeholder="Add a to-do"
+      <div data-r="pane">
+        <form class="todo-add" data-r="form">
+          <input data-r="input" type="text" maxlength="200" placeholder="Add a to-do"
             autocomplete="off" enterkeyhint="done" aria-label="New to-do">
           <button type="submit">Add</button>
         </form>
-        <ul class="todos" id="todoList"></ul>
+        <ul class="todos" data-r="list"></ul>
       </div>
-      <ul class="todos" id="backList" hidden></ul>
-      <p class="caveat" id="todoNote" hidden>Crossed-off items clear at the next sweep.</p>
+      <ul class="todos" data-r="back" hidden></ul>
     </div>
   </section>
+</template>
 
-  <!-- ============ SETTLEMENTS ============ -->
-  <!-- accountant_settlements: class actions he likely qualifies for, found by
-       the email sweep (notices every night, a site search on Sundays). Only
-       what he can still act on shows: a question, one to file, one filed and
-       waiting to pay. Claims are filed by hand, never by the sweep. -->
-  <section class="card plain" id="setCard">
+<!-- Highlights: mail worth knowing but not worth a push, from the mail sorter.
+     One row per sender, newest first, kept 7 days or until dismissed. -->
+<template data-w="alerts.highlights">
+  <section class="card plain">
     <div class="card-head">
-      <h2>Settlements</h2>
-      <span class="count" id="setCount">0</span>
+      <h2>Highlights</h2>
+      <span class="count" data-r="count">0</span>
     </div>
     <div class="card-body">
-      <ul class="sets" id="setList"></ul>
-      <p class="blank" id="setEmpty">Nothing to claim right now.</p>
+      <ul class="hls" data-r="list"></ul>
+      <p class="blank" data-r="empty">Nothing new from the mail.</p>
     </div>
   </section>
+</template>
 
-  <!-- ============ JOB TRACKING ============ -->
-  <!-- Counted from secretary_job_events, which the 1am sweep fills from job mail.
-       All-time on purpose: the tally runs until the search ends. -->
-  <section class="card plain" id="jobsCard">
+<!-- Settlements: class actions he likely qualifies for. Only what he can
+     still act on shows. Claims are filed by hand, never by the sweep. -->
+<template data-w="alerts.settlements">
+  <section class="card plain">
+    <div class="card-head">
+      <h2>Settlements</h2>
+      <span class="count" data-r="count">0</span>
+    </div>
+    <div class="card-body">
+      <ul class="sets" data-r="list"></ul>
+      <p class="blank" data-r="empty">Nothing to claim right now.</p>
+    </div>
+  </section>
+</template>
+
+<!-- Job Tracking: all-time counts from secretary_job_events -->
+<template data-w="alerts.jobs">
+  <section class="card plain">
     <div class="card-head">
       <h2>Job Tracking</h2>
     </div>
     <div class="card-body">
       <div class="jobs">
-        <div class="job-row"><span class="job-name">Applications</span><span class="job-n" id="jobApps">&mdash;</span></div>
-        <div class="job-row"><span class="job-name">Rejections</span><span class="job-n" id="jobRej">&mdash;</span></div>
-        <div class="job-row"><span class="job-name">Interviews</span><span class="job-n" id="jobInt">&mdash;</span></div>
+        <div class="job-row"><span class="job-name">Applications</span><span class="job-n" data-r="apps">&mdash;</span></div>
+        <div class="job-row"><span class="job-name">Rejections</span><span class="job-n" data-r="rej">&mdash;</span></div>
+        <div class="job-row"><span class="job-name">Interviews</span><span class="job-n" data-r="int">&mdash;</span></div>
       </div>
     </div>
   </section>
+</template>
 
-  </div>
+<!-- Spending: the heatmap. Its defaults are in #budget below; the numbers
+     typed under the squares (engine_settings) win. -->
+<template data-w="balance.spending">
+  <section class="card plain budget-card">
+    <div class="card-head">
+      <h2>Spending</h2>
+    </div>
+    <div class="card-body">
+      <div class="bud-heat" data-r="heat" role="group" aria-label="Spend by day"></div>
+      <div class="heat-legend" data-r="legend"></div>
+      <div class="heat-detail" data-r="detail">Tap a day to see what was spent.</div>
+    </div>
+  </section>
+</template>
 
-  <div class="page" data-page="food" hidden>
-  <!-- ============ INTAKE ============ -->
-  <!-- Fourteen days of calories per person, each bar split by where those
-       calories came from. There is no target line and there should not be one
-       (2026-09-14): the only reference is each person's own average. -->
+<!-- Money, whole: the month navigator, figures and chips stuck under the
+     strip, then spend by category and the ledger. The other money versions
+     are pieces of it; all of them follow one month. -->
+<template data-w="money.full">
+  <section class="card money-card">
+    <div class="stick">
+      <div class="monthnav">
+        <button class="mnav" data-r="prev" type="button" aria-label="Earlier month">&lsaquo;</button>
+        <button class="mnav-mid" data-r="label" type="button" aria-label="Jump to the latest month">&nbsp;</button>
+        <button class="mnav" data-r="next" type="button" aria-label="Later month">&rsaquo;</button>
+      </div>
+      <div class="figs">
+        <div class="fig in"><div class="fig-label">In</div><div class="fig-val" data-r="in">$0</div></div>
+        <div class="fig out"><div class="fig-label">Out</div><div class="fig-val" data-r="out">$0</div></div>
+        <div class="fig net"><div class="fig-label">Net</div><div class="fig-val" data-r="net">$0</div></div>
+      </div>
+      <div class="tabs" data-r="tabs" role="group" aria-label="Filter by category"></div>
+    </div>
+    <div class="card-body">
+      <p class="cats-head">Spend by category</p>
+      <div class="cats" data-r="cats"></div>
+      <button class="disclose" data-r="toggle" aria-expanded="false">
+        <span data-r="ledgerLabel">Show transactions</span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <div class="ledger" data-r="ledger" hidden></div>
+      <p class="caveat gap-note" data-r="gap" hidden></p>
+    </div>
+  </section>
+</template>
+
+<template data-w="money.figures">
+  <section class="card money-card money-part">
+    <div class="monthnav">
+      <button class="mnav" data-r="prev" type="button" aria-label="Earlier month">&lsaquo;</button>
+      <button class="mnav-mid" data-r="label" type="button" aria-label="Jump to the latest month">&nbsp;</button>
+      <button class="mnav" data-r="next" type="button" aria-label="Later month">&rsaquo;</button>
+    </div>
+    <div class="figs">
+      <div class="fig in"><div class="fig-label">In</div><div class="fig-val" data-r="in">$0</div></div>
+      <div class="fig out"><div class="fig-label">Out</div><div class="fig-val" data-r="out">$0</div></div>
+      <div class="fig net"><div class="fig-label">Net</div><div class="fig-val" data-r="net">$0</div></div>
+    </div>
+    <div class="card-body"><p class="caveat gap-note" data-r="gap" hidden></p></div>
+  </section>
+</template>
+
+<template data-w="money.categories">
+  <section class="card plain money-card money-part">
+    <div class="card-head">
+      <h2>Spend by Category</h2>
+    </div>
+    <div class="monthnav">
+      <button class="mnav" data-r="prev" type="button" aria-label="Earlier month">&lsaquo;</button>
+      <button class="mnav-mid" data-r="label" type="button" aria-label="Jump to the latest month">&nbsp;</button>
+      <button class="mnav" data-r="next" type="button" aria-label="Later month">&rsaquo;</button>
+    </div>
+    <div class="card-body">
+      <p class="caveat gap-note" data-r="gap" hidden></p>
+      <div class="cats" data-r="cats"></div>
+    </div>
+  </section>
+</template>
+
+<template data-w="money.transactions">
+  <section class="card plain money-card money-part">
+    <div class="card-head">
+      <h2>Transactions</h2>
+      <span class="count" data-r="n">0</span>
+    </div>
+    <div class="monthnav">
+      <button class="mnav" data-r="prev" type="button" aria-label="Earlier month">&lsaquo;</button>
+      <button class="mnav-mid" data-r="label" type="button" aria-label="Jump to the latest month">&nbsp;</button>
+      <button class="mnav" data-r="next" type="button" aria-label="Later month">&rsaquo;</button>
+    </div>
+    <div class="tabs" data-r="tabs" role="group" aria-label="Filter by category"></div>
+    <div class="card-body">
+      <p class="caveat gap-note" data-r="gap" hidden></p>
+      <div class="ledger" data-r="ledger"></div>
+    </div>
+  </section>
+</template>
+
+<!-- Credits: read-only, what has been claimed this cycle -->
+<template data-w="balance.credits">
+  <section class="card plain credits-card">
+    <div class="card-head">
+      <h2>Credits</h2>
+      <span class="count" data-r="open">&nbsp;</span>
+    </div>
+    <div class="card-body">
+      <div class="creds" data-r="body"></div>
+    </div>
+  </section>
+</template>
+
+<!-- Exchange: when to convert, between any two of US dollars, rupiah and
+     Canadian. Rates are read live from a public API (wallet.js). Each copy
+     keeps its own pair. -->
+<template data-w="fx.exchange">
+  <section class="card plain">
+    <div class="card-head">
+      <h2 data-r="title">USD to CAD</h2>
+      <span class="count" data-r="asof" hidden></span>
+    </div>
+    <div class="card-body">
+      <div class="errbar fx-err" data-r="err" hidden></div>
+      <div class="fx-pick">
+        <select data-r="from" aria-label="Convert from"></select>
+        <button type="button" class="fx-swap" data-r="swap" aria-label="Swap currencies">&#8644;</button>
+        <select data-r="to" aria-label="Convert to"></select>
+      </div>
+      <p class="fx-verdict"><span class="fx-tag"></span><span class="fx-why"></span></p>
+      <div class="fx-top">
+        <span class="fx-now">&mdash;</span><span class="fx-unit"></span>
+        <span class="fx-chg"></span>
+      </div>
+      <div class="fx-ranges" role="group" aria-label="Range"></div>
+      <div class="fx-chart">
+        <div class="fx-plot">
+          <svg viewBox="0 0 600 200" preserveAspectRatio="none" aria-hidden="true">
+            <path class="fx-area"/><path class="fx-line"/>
+          </svg>
+          <div class="fx-good" hidden><span>Good</span></div>
+          <div class="fx-rule" hidden></div>
+          <div class="fx-dot" hidden></div>
+        </div>
+        <div class="fx-axis"><span class="fx-hi"></span><span class="fx-lo"></span></div>
+        <div class="fx-dates"><span class="fx-from"></span><span class="fx-to"></span></div>
+      </div>
+      <p class="fx-read"></p>
+    </div>
+  </section>
+</template>
+
+<!-- Net Worth: read through page_monarch_data(). The total with assets
+     against debts, and its trend; the default layout stacks the two. -->
+<template data-w="networth.total">
+  <section class="card plain">
+    <div class="card-head">
+      <h2>Net Worth</h2>
+      <span class="count" data-r="asof">&nbsp;</span>
+    </div>
+    <div class="card-body">
+      <div class="errbar" data-r="err" hidden></div>
+      <div class="mn-total" data-r="total">&mdash;</div>
+      <div class="mn-split">
+        <span>Assets<b data-r="assets">&mdash;</b></span>
+        <span class="owed">Debts<b data-r="debts">&mdash;</b></span>
+      </div>
+      <div class="mn-bar"><span data-r="barA" style="width:100%"></span></div>
+    </div>
+  </section>
+</template>
+
+<template data-w="networth.trend">
+  <section class="card plain">
+    <div class="card-head">
+      <h2>Net Worth Trend</h2>
+      <span class="count" data-r="asof">&nbsp;</span>
+    </div>
+    <div class="card-body">
+      <div class="errbar" data-r="err" hidden></div>
+      <div class="mn-ranges" data-r="ranges" role="group" aria-label="Range"></div>
+      <div class="fx-chart">
+        <div class="fx-plot">
+          <svg viewBox="0 0 600 200" preserveAspectRatio="none" aria-hidden="true">
+            <path class="fx-area"/><path class="fx-line"/>
+          </svg>
+          <div class="fx-rule" hidden></div>
+          <div class="fx-dot" hidden></div>
+        </div>
+        <div class="fx-axis"><span class="fx-hi"></span><span class="fx-lo"></span></div>
+        <div class="fx-dates"><span class="fx-from"></span><span class="fx-to"></span></div>
+      </div>
+      <p class="fx-read" data-r="read"></p>
+    </div>
+  </section>
+</template>
+
+<!-- Spending's defaults. leave_out_over drops any single charge above that
+     size from the squares and totals: a suit or a wedding's flowers is not a
+     treat. always_count names merchants exempt from it, matched anywhere in
+     the description, because a big Costco run is still groceries. Only
+     dining, grocery and shopping count, and the three caps set the shading: a
+     day's even share of their weekly total is the middle shade. How each
+     figure was built is in the README. deep_red_at is where the colour past
+     the budget reaches deep red. The numbers typed under the squares
+     (engine_settings) win over both. -->
+<script type="application/json" id="budget">
+{"caps": {"dining": 25, "grocery": 110, "shopping": 25}, "weeks": 4, "since": "2026-08-01",
+ "leave_out_over": 99, "always_count": ["costco"],
+ "deep_red_at": 100}
+</script>
+
+<!-- Food is cut off: see "Bringing Food back" in the README. Its markup is
+     kept here as it was; food.js still finds it by id, so it has to become
+     widgets before it comes back. Intake has no target line and should not
+     have one (2026-09-14): the only reference is each person's own
+     average. The doctor's recommendation is written on request only. -->
+<template id="food-markup">
   <section class="card plain" id="intakeCard">
     <div class="card-head">
       <h2>Intake</h2>
@@ -136,11 +402,6 @@
       <div id="intakeBody"><p class="blank">Loading&hellip;</p></div>
     </div>
   </section>
-
-  <!-- ============ DOCTOR'S RECOMMENDATION ============ -->
-  <!-- Written by the doctor skill in a chat, on request. Nothing writes it on
-       a schedule: a recommendation nobody asked for is a cost with no reader.
-       Only the newest per person shows; each stands until that person's next. -->
   <section class="card plain" id="recCard">
     <div class="card-head">
       <h2>Doctor's Recommendation</h2>
@@ -149,118 +410,17 @@
       <div id="recBody"><p class="blank">Loading&hellip;</p></div>
     </div>
   </section>
-  </div>
-
-  <div class="page" data-page="balance" hidden>
-  <!-- ============ SPENDING ============ -->
-  <!-- leave_out_over drops any single charge above that size from the squares
-       and totals: a new sofa or a plane ticket is not a treat. always_count
-       names merchants exempt from it, matched anywhere in the description,
-       because a big Costco run is still groceries. A charge left out still
-       shows when its day is tapped.
-
-       Four calendar weeks of days. Only dining, grocery and shopping count, and
-       the three caps below are what set the shading: a day's even share of
-       their weekly total is the middle shade. They are benchmarks — what a
-       household like this one is reckoned to need — and how each figure was
-       built is in the README. deep_red_over is a flat line on top of that: a
-       day past it gets the strongest red, whatever the caps say. -->
-  <script type="application/json" id="budget">
-  {"caps": {"dining": 25, "grocery": 110, "shopping": 25}, "weeks": 4,
-   "leave_out_over": 99, "always_count": ["costco"],
-   "deep_red_over": 100}
-  </script>
-
-  <section class="card plain budget-card" id="budgetCard">
-    <div class="card-head">
-      <h2>Spending</h2>
-    </div>
-    <div class="card-body">
-      <div class="heat" id="budHeat" role="group" aria-label="Spend by day"></div>
-      <div class="heat-legend" id="budLegend"></div>
-      <div class="heat-detail" id="budDetail">Tap a day to see what was spent.</div>
-    </div>
-  </section>
-  <!-- ============ MONEY + TRANSACTIONS (merged) ============ -->
-  <section class="card money-card" id="moneyCard">
-
-    <div class="stick">
-      <div class="monthnav">
-        <button class="mnav" id="mPrev" type="button" aria-label="Earlier month">&lsaquo;</button>
-        <button class="mnav-mid" id="monthLabel" type="button" aria-label="Jump to the latest month">September 2026</button>
-        <button class="mnav" id="mNext" type="button" aria-label="Later month">&rsaquo;</button>
-      </div>
-      <div class="figs">
-        <div class="fig in">
-          <div class="fig-label">In</div>
-          <div class="fig-val" id="figIn">$0.00</div>
-        </div>
-        <div class="fig out">
-          <div class="fig-label">Out</div>
-          <div class="fig-val" id="figOut">$0.00</div>
-        </div>
-        <div class="fig net">
-          <div class="fig-label">Net</div>
-          <div class="fig-val" id="figNet">$0.00</div>
-        </div>
-      </div>
-      <div class="tabs" id="tabs" role="group" aria-label="Filter by category"></div>
-    </div>
-
-    <div class="card-body">
-
-      <p class="cats-head">Spend by category</p>
-      <div class="cats" id="cats"></div>
-
-      <button class="disclose" id="ledgerToggle" aria-expanded="false" aria-controls="ledger">
-        <span id="ledgerLabel">Show transactions</span>
-        <span class="chev" aria-hidden="true"></span>
-      </button>
-      <div class="ledger" id="ledger" hidden></div>
-
-      <p class="caveat" id="gapNote" hidden></p>
-      <p class="caveat" id="syncedLine">Synced</p>
-    </div>
-  </section>
-  <!-- ============ CARD CREDITS ============ -->
-  <section class="card plain credits-card" id="creditsCard">
-    <div class="card-head">
-      <h2>Credits</h2>
-      <span class="count" id="creditsOpen">&nbsp;</span>
-    </div>
-    <div class="card-body">
-      <div class="creds" id="credsBody">
-      </div>
-    </div>
-  </section>
-  </div>
-
-  <div class="page" data-page="rentals" hidden>
-  <!-- ============ RENTALS ============ -->
-  <!-- Temporary: houses the daily rental sweep found, until a place is found.
-       Then this page, its two files, its tables and its sweep all go. -->
-  <section class="card plain" id="rentCard">
-    <div class="card-head">
-      <h2>Rentals</h2>
-      <span class="count" id="rentCount">0</span>
-    </div>
-    <div class="card-body">
-      <div id="rentFilter" hidden></div>
-      <ul class="rents" id="rentList"></ul>
-      <p class="blank" id="rentEmpty">Nothing has passed vetting yet.</p>
-    </div>
-  </section>
-  </div>
-
-</main>
-<button class="signout" id="signout" type="button">Reset the demo</button>
+</template>
 </div>
 
 <script src="demo-data.js"></script>
-<script src="data.js"></script>
-<script src="alerts.js"></script>
-<script src="food.js"></script>
-<script src="balance.js"></script>
-<script src="rentals.js"></script>
+<script src="data.js?v=4"></script>
+<script src="layout.js?v=3"></script>
+<script src="alerts.js?v=5"></script>
+<!-- <script src="food.js"></script>  Food is cut off: see the README -->
+<script src="balance.js?v=6"></script>
+<script src="wallet.js?v=7"></script>
+<script src="wedding.js?v=24"></script>
+<script src="edit.js?v=3"></script>
 </body>
 </html>

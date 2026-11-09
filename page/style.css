@@ -1,49 +1,27 @@
-/* Shared: tokens, layout, the page strip, cards and the demo note.
+/* Shared: tokens, layout, the page strip, cards and the sign-in screen.
    Anything belonging to a single page lives in that page's stylesheet. */
 
 /* The artifact host supplied this; a plain page has to say it. Every .page and
    card that sets display would otherwise ignore its hidden attribute. */
 [hidden]{display:none!important}
 
-/* Blue hour into first light: cool slate ground, one sunrise amber for the
-   things he has to act on. Semantic colors stay separate from that accent. */
+/* One look in every theme, the wedding site's: linen ground, cream cards, umber ink,
+   sage and tan, with a brown header bar. Semantic colors stay separate from the accent. */
 :root{
-  --paper:#e9edf2; --card:#ffffff; --sunk:#f2f5f8;
-  --ink:#111924; --ink-2:#445366; --ink-3:#78889b;
-  --line:#d4dce6; --line-2:#e4eaf1;
-  --accent:#9a6410; --accent-soft:#f6ecd8;
-  --in:#2f6b4a; --in-soft:#dcece3;
-  --out:#a03a2c; --out-soft:#f7e3df;
-  --warn:#8f6410; --warn-soft:#f7edd6;
-  --on-ink:#ffffff;
-  --shadow:0 1px 2px rgba(17,25,36,.05),0 10px 28px -20px rgba(17,25,36,.4);
-  --sticky-shadow:0 6px 16px -12px rgba(17,25,36,.5);
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --paper:#0c1218; --card:#141c25; --sunk:#0f1720;
-    --ink:#e7edf5; --ink-2:#a9b8c9; --ink-3:#78889b;
-    --line:#26313d; --line-2:#1c252f;
-    --accent:#e0a94e; --accent-soft:#2c2415;
-    --in:#6fbf90; --in-soft:#17281f;
-    --out:#e08573; --out-soft:#2c1c19;
-    --warn:#dcac4d; --warn-soft:#2a2315;
-    --on-ink:#0c1218;
-    --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 28px -20px rgba(0,0,0,.9);
-    --sticky-shadow:0 6px 16px -12px rgba(0,0,0,.9);
-  }
-}
-:root[data-theme="dark"]{
-  --paper:#0c1218; --card:#141c25; --sunk:#0f1720;
-  --ink:#e7edf5; --ink-2:#a9b8c9; --ink-3:#78889b;
-  --line:#26313d; --line-2:#1c252f;
-  --accent:#e0a94e; --accent-soft:#2c2415;
-  --in:#6fbf90; --in-soft:#17281f;
-  --out:#e08573; --out-soft:#2c1c19;
-  --warn:#dcac4d; --warn-soft:#2a2315;
-  --on-ink:#0c1218;
-  --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 28px -20px rgba(0,0,0,.9);
-  --sticky-shadow:0 6px 16px -12px rgba(0,0,0,.9);
+  --paper:#e9e2da; --card:#f6f3ec; --sunk:#efe9df;
+  --ink:#36302a; --ink-2:#6b5f53; --ink-3:#7a6e61;
+  --line:#d5cabd; --line-2:#e2d9cd;
+  --accent:#7d6548; --accent-soft:#eadfcd;
+  --in:#5a6a48; --in-soft:#dfe3d2;
+  --out:#9b3b22; --out-soft:#f1d9d0;
+  --warn:#8a5a14; --warn-soft:#f1e4c4;
+  --on-ink:#f6f3ec;
+  --tan:#b9a590; --bar:#4f3f33; --bar-ink:#d9cfc3; --sage-light:#c3cba9;
+  --display:"Averia Serif Libre",Georgia,"Times New Roman",serif;
+  --body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --shadow:none;
+  --sticky-shadow:0 6px 16px -12px rgba(54,48,42,.45);
+  color-scheme:light;
 }
 
 *{box-sizing:border-box}
@@ -53,57 +31,230 @@
    page stop the pinch. */
 html{touch-action:manipulation;-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--paper);color:var(--ink);
-  font-family:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-family:var(--body);
   font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
 .wrap{max-width:680px;margin:0 auto;padding:0 16px 64px}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
 
-header.top{padding:28px 0 18px}
-h1{font-family:"Bricolage Grotesque","Public Sans",sans-serif;font-weight:800;
-  font-size:clamp(28px,7vw,38px);line-height:1.02;letter-spacing:-.02em;margin:0;
+header.top{margin:0 -16px;padding:0}
+.bar{padding:22px 16px 20px;text-align:center;background:var(--bar)}
+.bar .names{font-size:.78rem;letter-spacing:.22em;text-transform:uppercase;font-weight:700;color:var(--sage-light)}
+.bar h1{color:#e9e2da;font-weight:700;margin-top:4px}
+header.top .errbar{margin:12px 16px 0}
+h1{font-family:var(--display);font-weight:700;
+  font-size:clamp(28px,7vw,38px);line-height:1.05;letter-spacing:0;margin:0;
   text-wrap:balance}
-.date{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px;
+.date{font-family:var(--body);font-size:13px;
   color:var(--ink-3);letter-spacing:.02em;margin-top:6px}
 
-/* ===== the three pages ===== */
-/* One strip, one page shown at a time. `.tabs`/`.tab` were already taken by
-   the category chips inside the money card, so these carry their own names
-   rather than overloading those. --tabh is the strip's height, and the money
-   card's own sticky header sits below it. */
-:root{--tabh:43px}
-.pagetabs{position:sticky;top:0;z-index:8;display:flex;
-  background:var(--paper);border-bottom:1px solid var(--line);
-  margin:0 -16px 16px;padding:0 16px}
-.ptab{flex:1 1 0;min-width:0;font:inherit;cursor:pointer;
-  font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;
-  font-weight:700;letter-spacing:.12em;text-transform:uppercase;
-  color:var(--ink-3);background:none;border:none;
-  border-bottom:2px solid transparent;margin-bottom:-1px;
-  padding:14px 4px 12px;white-space:nowrap}
-@media (max-width:380px){.ptab{font-size:10px;letter-spacing:.06em}}
-.ptab:hover{color:var(--ink)}
-.ptab[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+/* ===== the pages ===== */
+/* One strip, one page shown at a time, drawn as the tabs of a filing cabinet
+   drawer: the open page's tab is the colour of the page and sits over the
+   strip's line, so it joins the page below; the others are darker and set
+   a little lower, behind it. `.tabs`/`.tab` were already taken by the
+   category chips inside the money card, so these carry their own names.
+   --tabh is the strip's height, and the money card's own sticky header sits
+   below it. */
+:root{--tabh:45px}
+.pagetabs{position:sticky;top:0;z-index:8;display:flex;justify-content:center;gap:3px;
+  align-items:flex-end;overflow-x:auto;scrollbar-width:none;
+  background:var(--paper);box-shadow:inset 0 -1px 0 var(--line);
+  margin:0 -16px 16px;padding:8px 16px 0}
+.pagetabs::-webkit-scrollbar{display:none}
+.ptab{flex:none;min-height:36px;font:inherit;cursor:pointer;
+  font-size:.92rem;font-weight:400;color:var(--ink-2);background:var(--line-2);
+  border:1px solid var(--line);border-bottom:none;border-radius:10px 10px 0 0;
+  padding:6px 14px;white-space:nowrap;margin:4px 0 1px;min-height:32px}
+@media (max-width:520px){
+  .pagetabs{justify-content:flex-start;gap:2px;padding-inline:8px}
+  .ptab{flex:1 1 auto;padding:6px 8px;font-size:.88rem}
+}
+.ptab:hover{background:var(--sunk)}
+.ptab[aria-selected="true"]{background:var(--paper);color:var(--ink);font-weight:700;
+  margin:0;min-height:37px;border-color:var(--line)}
 .page{display:flex;flex-direction:column;gap:14px}
 
 main{display:flex;flex-direction:column;gap:14px}
 section.card{background:var(--card);border:1px solid var(--line);border-radius:14px;
   box-shadow:var(--shadow);overflow:hidden}
 .card-head{display:flex;align-items:center;gap:10px;padding:15px 18px 13px}
-h2{font-family:"Bricolage Grotesque","Public Sans",sans-serif;font-size:16px;
+h2{font-family:var(--display);font-size:16px;
   font-weight:700;letter-spacing:-.01em;margin:0;flex:1}
-.count{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;
+.count{font-family:var(--body);font-size:12px;
   font-weight:500;padding:3px 9px;border-radius:999px;background:var(--sunk);
   color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
 .count.act{background:var(--accent-soft);color:var(--accent)}
 .card-body{padding:16px 18px}
 .card.plain .card-head{border-bottom:1px solid var(--line-2);padding-bottom:15px}
 
-/* ===== the demo note ===== */
-.demo-note{margin:8px 0 0;padding:9px 12px;border-radius:10px;
-  background:var(--accent-soft);color:var(--accent);font-size:13px;line-height:1.45}
+/* ===== signing in ===== */
+.signin{max-width:380px;margin:12vh auto 0;padding:0 16px 64px}
+.signin h1{margin:6px 0 24px}
+.signin form{display:flex;flex-direction:column;gap:14px}
+.signin label{display:flex;flex-direction:column;gap:6px;
+  font-family:var(--body);font-size:11px;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.signin input{font:inherit;font-size:16px;letter-spacing:normal;text-transform:none;
+  color:var(--ink);background:var(--card);border:1px solid var(--line);
+  border-radius:10px;padding:12px 13px}
+.signin button{font:inherit;font-size:15px;font-weight:600;cursor:pointer;
+  color:var(--on-ink);background:var(--ink);border:1px solid var(--ink);
+  border-radius:999px;padding:12px;margin-top:4px}
+.signin button[disabled]{opacity:.5;cursor:default}
+.signin .msg{margin:0;min-height:1.45em;color:var(--out);font-size:14px}
+.signin .hint{margin:0;color:var(--ink-3);font-size:13px}
 .errbar{margin:12px 0 0;padding:11px 13px;border-radius:10px;
   background:var(--out-soft);color:var(--out);font-size:14px;line-height:1.45}
 .signout{display:block;margin:28px auto 0;font:inherit;font-size:13px;
   font-weight:600;cursor:pointer;color:var(--ink-3);background:none;
   border:1px solid var(--line);border-radius:999px;padding:8px 18px}
+.ptr{height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;
+  color:var(--ink-3);transition:height .15s}
+.ptr.ready,.ptr.spin{color:var(--ink)}
+.ptr.spin svg{animation:ptr-spin .8s linear infinite}
+@keyframes ptr-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .signout:hover{color:var(--ink);border-color:var(--ink-3)}
+
+/* ===== stacks: several cards in one, swiped between (layout.js) ===== */
+/* The names on top, one card shown; the cards inside lose their own frame
+   and title, which the names stand in for. */
+section.stack{padding:0;touch-action:pan-y}
+.nw-tabs{display:flex;align-items:center;gap:4px;padding:12px 18px 0;margin-bottom:10px;
+  overflow-x:auto;scrollbar-width:none}
+.nw-tabs::-webkit-scrollbar{display:none}
+.nw-tabs .count{margin-left:auto}
+.nw-tab{flex:none;font:inherit;font-size:12px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-3);background:none;border:none;border-radius:999px;
+  padding:3px 9px;cursor:pointer}
+.nw-tab[aria-pressed="true"]{background:var(--sunk);color:var(--ink);font-weight:700}
+.stack>.card{border:0;border-radius:0;background:none;box-shadow:none;overflow:visible}
+.stack>.card>.card-head{display:none}
+.stack>.card>.card-body{padding-top:0}
+.stack>.stack-off{display:none}
+
+/* ===== the page strip's "+" and the pieces of the first page ===== */
+/* "+" is a narrow folder tab of its own at the end of the strip */
+.ptab.ptab-add{flex:none;padding:6px 13px;font-size:1.15rem;font-weight:700;line-height:1;
+  color:var(--accent)}
+.ptab-x{display:none}
+.chrome{display:contents}
+/* an empty page: all of it is somewhere to hold, and a dotted box says so */
+.page.empty{min-height:calc(100vh - 140px)}
+.page-hint{margin-top:4px;padding:36px 22px;text-align:center;font-size:15px;line-height:1.45;
+  color:var(--ink-3);border:2px dashed var(--line);border-radius:14px}
+.hint-on{display:none}
+body.editing .hint-on{display:inline}
+body.editing .hint-off{display:none}
+
+/* ===== edit mode (edit.js) ===== */
+/* Holding still on blank space opens it, so nothing outside a field is
+   selectable or opens the long-press menu. */
+.wrap{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.wrap input,.wrap textarea{-webkit-user-select:text;user-select:text}
+.edit-float,.edit-foot,.tile,.edit-sample{display:none}
+.edit-btn{font:inherit;font-size:14px;font-weight:600;cursor:pointer;color:var(--on-ink);
+  background:var(--ink);border:1px solid var(--ink);border-radius:999px;padding:8px 16px}
+.edit-btn.quiet{color:var(--ink-2);background:none;border-color:var(--line)}
+/* Add card and Done float over the bottom corners */
+body.editing .edit-float{display:flex;justify-content:space-between;position:fixed;left:0;right:0;
+  bottom:0;z-index:20;max-width:680px;margin:0 auto;pointer-events:none;
+  padding:0 16px calc(16px + env(safe-area-inset-bottom))}
+.edit-float .edit-btn{pointer-events:auto;padding:11px 22px;font-size:15px;
+  box-shadow:0 8px 20px -8px rgba(54,48,42,.7)}
+.edit-float .edit-done{background:var(--accent);border-color:var(--accent)}
+body.editing .wrap{padding-bottom:120px}
+body.editing .edit-foot{display:flex;justify-content:center;gap:10px;margin-top:28px}
+body.editing .chrome>*,body.editing #signout{display:none!important}
+body.editing .ptab:not(.fixed) .ptab-x{display:inline-block;margin:0 -4px 0 6px;
+  font-size:15px;line-height:1;color:var(--ink-3)}
+body.editing .ptab{touch-action:pan-x}
+
+/* Each card shows its sample (small, made-up data) in place of itself, with
+   a handle laid over it: an x on the corner and a grip. */
+body.editing #pages>.page>section.card{position:relative;overflow:visible}
+body.editing #pages>.page>section.card[data-cid]>:not(.tile):not(.edit-sample),
+body.editing #pages>.page>.stack>section.card>:not(.tile):not(.edit-sample){display:none!important}
+body.editing .edit-sample{display:block}
+section.card.edit-sample{border:0;border-radius:inherit;background:none;box-shadow:none;
+  overflow:hidden;pointer-events:none}
+/* the grip sits where a card's count pill is; a sample's count means nothing */
+.edit-sample .card-head .count,body.editing .stack-tabs .count{visibility:hidden}
+.stack:not(.open) .edit-sample>.card-head{display:none}
+.stack:not(.open) .edit-sample>.card-body{padding-top:0}
+body.editing .tile{display:block;position:absolute;inset:0;z-index:3;touch-action:pan-y;cursor:default}
+.tile-x{position:absolute;top:-9px;left:-9px;width:26px;height:26px;padding:0;
+  border:2px solid var(--paper);border-radius:50%;background:var(--ink-2);color:var(--card);
+  font:inherit;font-size:16px;line-height:20px;cursor:pointer}
+.tile-grip{position:absolute;top:7px;right:7px;width:40px;height:36px;display:grid;place-items:center;
+  font-size:22px;color:var(--ink-2);background:var(--sunk);border-radius:10px;touch-action:none;cursor:grab}
+/* a stack: closed, one handle for all of it; tapped open, every card shows
+   with its own handle, and the stack's own covers only the names */
+body.editing #pages>.page>.stack:not(.open)>section.card>.tile{display:none}
+body.editing #pages>.page>.stack.open>.tile{bottom:auto;height:46px}
+body.editing #pages>.page>.stack.open>.tile>.tile-x{display:none}
+body.editing #pages>.page>.stack.open>section.card{display:block!important;position:relative;
+  border-top:1px solid var(--line-2)}
+.tile.sub .tile-x{top:9px;left:9px}
+.stack.open .edit-sample>.card-head{padding-left:44px}
+
+/* entering edit mode: the cards wiggle once, then stay still */
+@keyframes edit-wiggle{
+  0%,100%{transform:rotate(0)}
+  20%{transform:rotate(-1.2deg)}
+  40%{transform:rotate(1.1deg)}
+  60%{transform:rotate(-.7deg)}
+  80%{transform:rotate(.4deg)}
+}
+body.wiggle #pages>.page>section.card{animation:edit-wiggle .6s ease-in-out}
+body.wiggle #pages>.page>section.card:nth-child(even){animation-delay:.04s}
+@media (prefers-reduced-motion:reduce){
+  body.wiggle #pages>.page>section.card{animation:none}
+}
+
+/* samples are small: drawn at 80%, less chart, no readouts */
+.edit-sample,.gal-prev>.sample{zoom:.8}
+.sample .fx-plot{height:90px}
+.sample .fx-read,.sample .heat-detail,.sample .heat-legend,.sample .ed-hint{display:none}
+.sample .stick{position:static;box-shadow:none}
+
+.lifted{opacity:.35}
+body.dragging{cursor:grabbing}
+.ghost{position:fixed;left:16px;right:16px;max-width:648px;max-height:240px;overflow:hidden;
+  margin:0 auto;z-index:50;pointer-events:none;background:var(--card);border:1px solid var(--line);
+  border-radius:14px;box-shadow:0 14px 30px -12px rgba(54,48,42,.5);opacity:.96}
+.ghost>section.card{border:0;border-radius:0}
+.drop-line{position:absolute;z-index:40;height:3px;border-radius:2px;background:var(--accent);
+  pointer-events:none}
+.merge-target{outline:3px solid var(--accent);outline-offset:3px}
+.tab-rename{position:fixed;z-index:60;font:inherit;font-size:16px;padding:4px 10px;
+  border:2px solid var(--accent);border-radius:10px 10px 0 0;background:var(--card);color:var(--ink)}
+
+/* the Add card gallery: a sheet from the bottom */
+.gal-back{position:fixed;inset:0;z-index:30;background:rgba(54,48,42,.35)}
+.gal-sheet{position:fixed;left:0;right:0;bottom:0;z-index:31;max-width:680px;margin:0 auto;
+  max-height:80vh;overflow-y:auto;overscroll-behavior:contain;background:var(--paper);
+  border-radius:16px 16px 0 0;padding:0 16px calc(24px + env(safe-area-inset-bottom));
+  box-shadow:0 -10px 30px -12px rgba(54,48,42,.45);transition:transform .2s ease}
+.gal-sheet.away{transform:translateY(105%)}
+.gal-head{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;
+  padding:14px 0 12px;background:var(--paper)}
+.gal-head h2{font-size:18px}
+.gal-back-btn,.gal-close{font:inherit;cursor:pointer;background:none;border:none;color:var(--ink-2)}
+.gal-back-btn{font-size:24px;line-height:1;padding:0 6px 2px 0}
+.gal-close{font-size:14px;font-weight:600}
+.gal-types{display:flex;flex-direction:column;gap:8px}
+.gal-type{display:flex;justify-content:space-between;align-items:center;gap:10px;font:inherit;
+  text-align:left;cursor:pointer;color:var(--ink);background:var(--card);
+  border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.gal-type-name{font-family:var(--display);font-weight:700;font-size:16px}
+.gal-type-n{font-size:12px;color:var(--ink-3)}
+.gal-all{display:block;width:100%;margin:0 0 14px}
+.gal-item{margin:0 0 18px;touch-action:pan-y;cursor:grab}
+.gal-label{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+  margin:0 2px 6px;font-weight:700;font-size:14px}
+.gal-hint{font-weight:400;font-size:12px;color:var(--ink-3)}
+.gal-prev{pointer-events:none;max-height:340px;overflow:hidden;border-radius:14px}
+.gal-prev .stick{position:static}
+@media (prefers-reduced-motion:reduce){
+  .gal-sheet{transition:none}
+}
