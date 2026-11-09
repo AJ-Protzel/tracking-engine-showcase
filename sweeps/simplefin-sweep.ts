@@ -1,6 +1,6 @@
 // accountant-simplefin-sweep — the only writer of accountant_transactions.
 //
-// Deployed as a Supabase edge function on project <your-project-ref>. No
+// Deployed as a Supabase edge function on project your-project-ref. No
 // Claude routine touches the accountant tables; this function loads them, the
 // `accountant` skill curates them on demand, and the page reads them.
 //
@@ -8,7 +8,7 @@
 //   dry_run  — fetch a short window, map it, write nothing. Only the reply
 //              says what it saw, so a test never looks like a sync.
 //   sweep    — the pg_cron job, every four hours. Window derived from the oldest per-account
-//              watermark minus 5 days, clamped to [14, 90] days. One request.
+//              watermark minus 5 days, clamped to [14, 44] days. One request.
 //
 // There was a third mode, `backfill`, which walked 90-day windows backwards
 // from a cursor in accountant_backfill_state. It finished, the table was
@@ -20,13 +20,16 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const PACIFIC = "America/Los_Angeles";
 const DAY = 86400;
-const MAX_WINDOW_DAYS = 90;   // SimpleFIN's per-request span limit
+// SimpleFIN warns on any request over 45 days, counted to now, and each
+// warning fails the run and raises a Bank alert. The start is also clamped
+// against now (below), because the window is anchored to the top of today's
+// Pacific date and after 5pm Pacific that alone pushed 44 days past 45.
+const MAX_WINDOW_DAYS = 44;
 const SWEEP_LOOKBACK_PAD = 5; // re-pull this many days behind the watermark
 const SWEEP_MIN_DAYS = 14;
-// Pending charges are carried. Excluding them held the table two to three days
-// behind every card, which read as a dead feed rather than the settlement lag
-// it was. They are provisional — the amount can move, and some never settle —
-// so a pending row stays rewritable and a settled one does not.
+// Pending charges are not stored (2026-10-06). The bank rewrites or drops them,
+// so a rename, category or tracker link made on one was lost; a charge is
+// saved once it posts, a day or two later, and is final from then on.
 
 const pacificDate = (unix: number) =>
   new Date(unix * 1000).toLocaleDateString("en-CA", { timeZone: PACIFIC });
@@ -44,7 +47,7 @@ function splitAccessUrl(raw: string) {
 type Window = { start: number; end: number | null };
 
 async function fetchWindow(base: string, auth: string, w: Window) {
-  const qs = new URLSearchParams({ "start-date": String(w.start), pending: "1" });
+  const qs = new URLSearchParams({ "start-date": String(w.start) });
   if (w.end !== null) qs.set("end-date", String(w.end));
   const res = await fetch(base + "/accounts?" + qs.toString(), {
     headers: { Authorization: "Basic " + auth },
@@ -74,6 +77,7 @@ function mapRows(payload: any, byExternal: Map<string, any>) {
     a?.org?.name ?? a?.org?.domain ?? connById.get(String(a?.conn_id)) ?? null;
 
   const rows: any[] = [];
+  const balances: any[] = [];
   const unmapped: string[] = [];
   let txnsSeen = 0;
 
@@ -85,27 +89,31 @@ function mapRows(payload: any, byExternal: Map<string, any>) {
       unmapped.push((orgOf(a) ?? "?") + " / " + (a?.name ?? "?") + " [" + a.id + "]");
       continue;
     }
+    // The balance comes with every fetch, whatever the window, so the
+    // Wallet page's net worth is never more than one sweep old.
+    const bal = Number(a.balance);
+    if (a.balance != null && isFinite(bal)) {
+      const when = Number(a["balance-date"]) || Math.floor(Date.now() / 1000);
+      const avail = Number(a["available-balance"]);
+      balances.push({ id: acct.id, balance: bal, as_of: new Date(when * 1000).toISOString(),
+        day: pacificDate(when), available: a["available-balance"] != null && isFinite(avail) ? avail : null });
+    }
     for (const t of txns) {
       const amt = Number(t.amount);
       if (!isFinite(amt) || amt === 0) continue;
-      const pending = !!t.pending;
-      // `posted` is 0 until a charge settles, and pacificDate(0) is 1969.
-      // transacted_at is when it actually happened, which is the date he
-      // recognises anyway.
-      const when = Number(t.posted) || Number(t.transacted_at) || 0;
-      if (!when) continue;
+      // `posted` is 0 until a charge settles, so a charge without it is still pending.
+      const when = Number(t.posted) || 0;
+      if (t.pending || !when) continue;
       rows.push({
         account_id: acct.id,
         date: pacificDate(when),
         amount: amt,                       // already signed: - out, + in
         description: String(t.description ?? "").trim(),
-        source: "simplefin",
         external_id: "simplefin:" + t.id,
-        pending,
       });
     }
   }
-  return { rows, unmapped, txnsSeen, accountsSeen: accounts.length };
+  return { rows, balances, unmapped, txnsSeen, accountsSeen: accounts.length };
 }
 
 async function ingest(db: any, rows: any[]) {
@@ -117,6 +125,66 @@ async function ingest(db: any, rows: any[]) {
     else if (data?.[0]) { inserted += data[0].inserted ?? 0; skipped += data[0].skipped ?? 0; }
   }
   return { inserted, skipped, errors };
+}
+
+// One update per account: thirteen rows, every four hours. Each also lands in
+// accountant_balance_history, one row per account per day (the day's last run
+// wins), which the Monarch page charts as net worth over time.
+async function saveBalances(db: any, balances: any[]) {
+  const errors: string[] = [];
+  for (const b of balances) {
+    const { error } = await db.from("accountant_accounts")
+      .update({ balance: b.balance, balance_as_of: b.as_of }).eq("id", b.id);
+    if (error) errors.push("balance " + b.id + ": " + error.message);
+  }
+  if (balances.length) {
+    const { error } = await db.from("accountant_balance_history").upsert(
+      balances.map((b) => ({ account_id: b.id, as_of: b.day, balance: b.balance,
+        available: b.available, fetched_at: new Date().toISOString() })),
+      { onConflict: "account_id,as_of" });
+    if (error) errors.push("balance history: " + error.message);
+  }
+  return errors;
+}
+
+// Cloudflare Pages builds used this calendar month (UTC) across every Pages
+// project on the account; the free plan allows 500. Rides along on the bank
+// sweep because it is the free scheduled job; the page shows the newest count.
+// Needs secrets CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages: Read) and
+// CLOUDFLARE_ACCOUNT_ID. Never fails the sweep: a problem is returned as text.
+const CF_BUILD_LIMIT = 500;
+async function cloudflareBuilds() {
+  const token = Deno.env.get("CLOUDFLARE_API_TOKEN");
+  const account = Deno.env.get("CLOUDFLARE_ACCOUNT_ID");
+  if (!token || !account) return { error: "Cloudflare secrets not set" };
+  const now = new Date();
+  const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const api = "https://api.cloudflare.com/client/v4/accounts/" + account + "/pages/projects";
+  const get = async (url: string) => {
+    const res = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+    const body = await res.json().catch(() => null);
+    if (!res.ok || !body?.success) {
+      throw new Error("Cloudflare " + res.status + ": " + JSON.stringify(body?.errors ?? "").slice(0, 200));
+    }
+    return body;
+  };
+  try {
+    const projects = (await get(api)).result ?? [];
+    let used = 0;
+    for (const p of projects) {
+      // newest first; stop at the first page that reaches back past the 1st
+      for (let page = 1; page <= 40; page++) {
+        const list = (await get(api + "/" + encodeURIComponent(p.name)
+          + "/deployments?per_page=25&page=" + page)).result ?? [];
+        const inMonth = list.filter((d: any) => Date.parse(d.created_on) >= since.getTime());
+        used += inMonth.length;
+        if (list.length < 25 || inMonth.length < list.length) break;
+      }
+    }
+    return { used, limit: CF_BUILD_LIMIT, since: since.toISOString().slice(0, 10) };
+  } catch (e) {
+    return { error: String((e as any)?.message ?? e).slice(0, 240) };
+  }
 }
 
 const json = (body: unknown, status = 200) =>
@@ -170,9 +238,8 @@ Deno.serve(async (req: Request) => {
     return json({ error: msg }, 502);
   };
 
-  // A failed or empty read here once turned every account "unmapped" and let
-  // the prune delete every pending row (2026-09-14). Zero mapped accounts is
-  // never a real state, so stop before anything is written.
+  // Zero mapped accounts is never a real state (a failed read once looked like
+  // one, 2026-09-14), so stop before anything is written.
   const { data: mapped, error: mappedErr } = await db.from("accountant_accounts")
     .select("id, bank, name, simplefin_account_id")
     .not("simplefin_account_id", "is", null);
@@ -211,14 +278,16 @@ Deno.serve(async (req: Request) => {
     // an account whose bank posted late still gets picked up. One request
     // covers every account, so the OLDEST watermark sets the window for all.
     const today = toUnix(todayPacific());
+    // A linked account with no transactions at all (a crypto wallet,
+    // a joint checking account) has no watermark to catch up to, so it does not
+    // set the window. It used to force the maximum on every run.
     const withTxns = linked.filter((m: any) => m.last_txn);
-    const anyEmpty = linked.length !== withTxns.length;
 
     let days: number;
     let basis: string;
-    if (anyEmpty || withTxns.length === 0) {
+    if (withTxns.length === 0) {
       days = MAX_WINDOW_DAYS;
-      basis = "at least one linked account has no transactions yet";
+      basis = "no linked account has transactions yet";
     } else {
       const oldest = withTxns
         .map((m: any) => toUnix(m.last_txn))
@@ -228,49 +297,34 @@ Deno.serve(async (req: Request) => {
       basis = "oldest watermark " + toISO(oldest) + " + " + SWEEP_LOOKBACK_PAD + "d pad";
     }
 
-    const w: Window = { start: today - days * DAY, end: null };
+    const now = Math.floor(Date.now() / 1000);
+    const w: Window = { start: Math.max(today - days * DAY, now - MAX_WINDOW_DAYS * DAY), end: null };
     let payload: any;
     try { payload = await fetchWindow(base, auth, w); }
     catch (e) { return await fail(String((e as any)?.message ?? e), "fetch failed"); }
 
     const errors = feedErrorsOf(payload);
-    const { rows, unmapped, txnsSeen, accountsSeen } = mapRows(payload, byExternal);
+    const { rows, balances, unmapped, txnsSeen, accountsSeen } = mapRows(payload, byExternal);
     const ing = await ingest(db, rows);
     errors.push(...ing.errors);
+    errors.push(...await saveBalances(db, balances));
     if (unmapped.length) errors.push("unmapped accounts skipped: " + unmapped.join(", "));
-
-    // A pending charge the bank has dropped never settles. Anything still
-    // pending inside the window just covered, that the feed no longer lists,
-    // is deleted — so the table matches what the bank says right now.
-    // A run that mapped no account has no idea what is pending, so it prunes nothing.
-    const keep = rows.filter((r: any) => r.pending).map((r: any) => r.external_id);
-    let pruned: any = 0;
-    if (accountsSeen > unmapped.length) {
-      const { data, error: pruneErr } = await db.rpc("accountant_prune_pending", {
-        since: toISO(w.start), keep,
-      });
-      pruned = data;
-      if (pruneErr) errors.push("prune pending: " + pruneErr.message);
-    } else {
-      errors.push("prune pending skipped: no account mapped");
-    }
 
     await log({
       status: errors.length ? "failed" : "ok",
       counts: {
         accounts_seen: accountsSeen, txns_seen: txnsSeen,
         rows_inserted: ing.inserted, rows_skipped: ing.skipped,
-        pending_dropped: pruned ?? 0,
+        balances: balances.length,
       },
-      summary: { note: days + "d window (" + basis + ")" },
+      summary: { note: days + "d window (" + basis + ")", cloudflare: await cloudflareBuilds() },
       error: errors.length ? errors.join("; ") : null,
     });
 
     return json({
       mode, days, basis, window: { from: toISO(w.start), to: "now" },
       accounts_seen: accountsSeen, txns_seen: txnsSeen, candidates: rows.length,
-      inserted: ing.inserted, skipped: ing.skipped,
-      pending: keep.length, pending_dropped: pruned ?? 0, errors,
+      inserted: ing.inserted, skipped: ing.skipped, errors,
       ms: Date.now() - started,
     });
   }

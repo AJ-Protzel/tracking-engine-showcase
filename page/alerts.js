@@ -747,7 +747,7 @@ var TEHIGH = (function(){
       var v = {list: c.r('list'), count: c.r('count'), empty: c.r('empty')};
       if(c.sample){
         TEW.swap(function(){ return rows; }, function(o){ rows = o; },
-          [{sender: 'x@example.com', note: 'Zillow: Lori replied about 1400 Elm, free Sunday evening',
+          [{sender: 'x@example.com', note: 'Zillow: the agent replied about 200 Oak, free Sunday evening',
             thread: '', n: 2, at: new Date().toISOString()}], function(){ draw(v); });
         return;
       }
